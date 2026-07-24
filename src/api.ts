@@ -1,7 +1,7 @@
 import { config } from "./config";
 import type { PublishAuthorization, TelemetryPayload } from "./types";
 
-function authHeaders(token: string): HeadersInit {
+function authHeaders(token: string): Record<string, string> {
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
@@ -14,7 +14,10 @@ export async function authorizePublish(
   const base = config.streamApiBaseUrl.replace(/\/$/, "");
   const response = await fetcher(
     `${base}/api/v1/streams/${encodeURIComponent(streamId)}/publish`,
-    { headers: { Accept: "application/json", ...authHeaders(token) }, signal },
+    {
+      headers: { Accept: "application/json", ...authHeaders(token) },
+      ...(signal ? { signal } : {}),
+    },
   );
   if (!response.ok) throw new Error(`송출 인증 실패 (${response.status})`);
   const data = (await response.json()) as Partial<PublishAuthorization>;
