@@ -73,3 +73,10 @@ telemetry DTO를 확장하거나 모바일 전용 ingest endpoint를 추가해�
 
 구체적인 서버 계약과 백엔드 작업은
 [`docs/telemetry-contract.md`](docs/telemetry-contract.md)에 정리되어 있습니다.
+
+## 개발 프로세스
+
+- [기여 및 커밋/PR 규칙](CONTRIBUTING.md)
+- [Git workflow와 tag 정책](docs/git-workflow.md)
+- [Frontend architecture](docs/frontend-architecture.md)
+- [순서가 있는 Issue backlog](docs/issue-backlog.md)
