@@ -2,12 +2,15 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./App";
 import { RuntimeProvider } from "./app/RuntimeProvider";
+import { PublisherStoreProvider } from "./features/publisher/application/PublisherStoreProvider";
 import "./styles.css";
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <RuntimeProvider>
-      <App />
+      <PublisherStoreProvider>
+        <App />
+      </PublisherStoreProvider>
     </RuntimeProvider>
   </StrictMode>,
 );

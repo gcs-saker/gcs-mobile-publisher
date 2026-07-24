@@ -1,24 +1,23 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { authorizePublish, sendTelemetry } from "../../../api";
 import { useRuntime } from "../../../app/RuntimeProvider";
-import { config } from "../../../config";
 import { buildTelemetryPayload } from "../../../sensors";
-import type { PublisherStatus } from "../../../types";
 import { useAdaptiveQuality } from "../../../useAdaptiveQuality";
 import { useDeviceSensors } from "../../../useDeviceSensors";
 import { usePwaInstall } from "../../../usePwaInstall";
 import { createWhipSession } from "../../../whip";
+import {
+  usePublisherStore,
+  usePublisherStoreApi,
+} from "../application/PublisherStoreProvider";
 
 export function usePublisherController() {
   const runtime = useRuntime();
-  const [streamId, setStreamId] = useState(config.defaultStreamId);
-  const [token, setToken] = useState(() => runtime.sessionStore.get("gcs.accessToken") || "");
-  const [status, setStatus] = useState<PublisherStatus>("idle");
-  const [message, setMessage] = useState("송출 준비를 눌러 카메라와 센서를 시작하세요.");
-  const [muted, setMuted] = useState(false);
+  const store = usePublisherStoreApi();
+  const state = usePublisherStore((snapshot) => snapshot);
+  const { isOnline, mediaReady, message, muted, quality, status, streamId, token } = state;
   const [media, setMedia] = useState<MediaStream | null>(null);
   const [peerConnection, setPeerConnection] = useState<RTCPeerConnection | null>(null);
-  const [isOnline, setIsOnline] = useState(runtime.network.online);
   const videoRef = useRef<HTMLVideoElement>(null);
   const mediaRef = useRef<MediaStream | null>(null);
   const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
@@ -33,12 +32,12 @@ export function usePublisherController() {
     start: startSensors,
     stop: stopSensors,
   } = useDeviceSensors(runtime);
-  const quality = useAdaptiveQuality(peerConnection, media, status === "live", runtime.scheduler);
+  const adaptiveQuality = useAdaptiveQuality(peerConnection, media, status === "live", runtime.scheduler);
   const pwa = usePwaInstall();
 
   const prepare = useCallback(async () => {
     try {
-      setStatus("requesting");
+      store.setState({ status: "requesting" });
       if (token.trim()) runtime.sessionStore.set("gcs.accessToken", token.trim());
       else runtime.sessionStore.remove("gcs.accessToken");
       mediaRef.current?.getTracks().forEach((track) => track.stop());
@@ -58,23 +57,28 @@ export function usePublisherController() {
       });
       mediaRef.current = nextMedia;
       setMedia(nextMedia);
+      store.setState({ mediaReady: true });
       if (videoRef.current) videoRef.current.srcObject = nextMedia;
       await startSensors();
       wakeLockRef.current = await runtime.wakeLock.request();
-      setStatus("preview");
-      setMessage("후면 카메라와 센서가 준비됐습니다.");
+      store.setState({
+        status: "preview",
+        message: "후면 카메라와 센서가 준비됐습니다.",
+      });
     } catch (reason) {
-      setStatus("error");
-      setMessage(reason instanceof Error ? reason.message : "기기 권한을 받을 수 없습니다.");
+      store.setState({
+        status: "error",
+        message: reason instanceof Error ? reason.message : "기기 권한을 받을 수 없습니다.",
+      });
     }
-  }, [runtime, startSensors, token]);
+  }, [runtime, startSensors, store, token]);
 
   const publish = useCallback(async () => {
     if (!mediaRef.current) return;
     try {
-      setStatus("authorizing");
+      store.setState({ status: "authorizing" });
       const authorization = await authorizePublish(streamId.trim(), token.trim(), runtime.fetch);
-      setStatus("connecting");
+      store.setState({ status: "connecting" });
       peerConnectionRef.current?.close();
       const connection = await createWhipSession(
         mediaRef.current,
@@ -82,8 +86,10 @@ export function usePublisherController() {
         authorization.iceServers,
         (state) => {
           if (state !== "disconnected" && state !== "failed") return;
-          setStatus("reconnecting");
-          setMessage("네트워크 연결을 복구하고 있습니다.");
+          store.setState({
+            status: "reconnecting",
+            message: "네트워크 연결을 복구하고 있습니다.",
+          });
           if (reconnectTimerRef.current !== null) return;
           const delay = Math.min(15_000, 1_000 * 2 ** reconnectAttemptRef.current);
           reconnectAttemptRef.current += 1;
@@ -100,18 +106,24 @@ export function usePublisherController() {
       setPeerConnection(connection);
       startedAtRef.current = runtime.clock.now();
       reconnectAttemptRef.current = 0;
-      setStatus("live");
-      setMessage("영상과 현장 센서를 송출하고 있습니다.");
+      store.setState({
+        status: "live",
+        message: "영상과 현장 센서를 송출하고 있습니다.",
+      });
     } catch (reason) {
       if (mediaRef.current && !runtime.network.online) {
-        setStatus("reconnecting");
-        setMessage("네트워크 연결을 기다리고 있습니다.");
+        store.setState({
+          status: "reconnecting",
+          message: "네트워크 연결을 기다리고 있습니다.",
+        });
       } else {
-        setStatus("error");
-        setMessage(reason instanceof Error ? reason.message : "송출을 시작하지 못했습니다.");
+        store.setState({
+          status: "error",
+          message: reason instanceof Error ? reason.message : "송출을 시작하지 못했습니다.",
+        });
       }
     }
-  }, [runtime, streamId, token]);
+  }, [runtime, store, streamId, token]);
 
   const stop = useCallback(() => {
     if (reconnectTimerRef.current !== null) {
@@ -125,21 +137,28 @@ export function usePublisherController() {
     mediaRef.current?.getTracks().forEach((track) => track.stop());
     mediaRef.current = null;
     setMedia(null);
+    store.setState({ mediaReady: false });
     if (videoRef.current) videoRef.current.srcObject = null;
     stopSensors();
     void wakeLockRef.current?.release();
     wakeLockRef.current = null;
-    setStatus("idle");
-    setMessage("송출을 종료했습니다.");
-  }, [runtime.scheduler, stopSensors]);
+    store.setState({
+      status: "idle",
+      message: "송출을 종료했습니다.",
+    });
+  }, [runtime.scheduler, stopSensors, store]);
 
   const toggleMute = useCallback(() => {
-    const nextMuted = !muted;
+    const nextMuted = !store.getSnapshot().muted;
     mediaRef.current?.getAudioTracks().forEach((track) => {
       track.enabled = !nextMuted;
     });
-    setMuted(nextMuted);
-  }, [muted]);
+    store.setState({ muted: nextMuted });
+  }, [store]);
+
+  useEffect(() => {
+    store.setState({ quality: adaptiveQuality });
+  }, [adaptiveQuality, store]);
 
   useEffect(() => {
     publishRef.current = publish;
@@ -147,20 +166,22 @@ export function usePublisherController() {
 
   useEffect(() => runtime.network.subscribe(
     () => {
-      setIsOnline(true);
+      store.setState({ isOnline: true });
       if (mediaRef.current && (status === "reconnecting" || status === "error")) {
-        setMessage("네트워크가 복구되어 송출을 다시 연결합니다.");
+        store.setState({ message: "네트워크가 복구되어 송출을 다시 연결합니다." });
         void publishRef.current();
       }
     },
     () => {
-      setIsOnline(false);
+      store.setState({ isOnline: false });
       if (mediaRef.current) {
-        setStatus("reconnecting");
-        setMessage("네트워크가 끊겼습니다. 연결 복구를 기다립니다.");
+        store.setState({
+          status: "reconnecting",
+          message: "네트워크가 끊겼습니다. 연결 복구를 기다립니다.",
+        });
       }
     },
-  ), [runtime.network, status]);
+  ), [runtime.network, status, store]);
 
   useEffect(() => {
     if (status !== "live") return;
@@ -176,11 +197,13 @@ export function usePublisherController() {
         token,
         runtime.fetch,
       ).catch((reason: unknown) => {
-        setMessage(reason instanceof Error ? reason.message : "센서 전송 오류");
+        store.setState({
+          message: reason instanceof Error ? reason.message : "센서 전송 오류",
+        });
       });
     }, 2_000);
     return () => runtime.scheduler.clearInterval(id);
-  }, [runtime, snapshot, status, streamId, token]);
+  }, [runtime, snapshot, status, store, streamId, token]);
 
   useEffect(() => stop, [stop]);
 
@@ -189,7 +212,7 @@ export function usePublisherController() {
     install: pwa.install,
     isInstalled: pwa.isInstalled,
     isOnline,
-    mediaReady: Boolean(media),
+    mediaReady,
     message,
     muted,
     prepare,
@@ -200,9 +223,9 @@ export function usePublisherController() {
     status,
     stop,
     streamId,
-    setStreamId,
+    setStreamId: (value: string) => store.setState({ streamId: value }),
     token,
-    setToken,
+    setToken: (value: string) => store.setState({ token: value }),
     toggleMute,
     videoRef,
   } as const;
