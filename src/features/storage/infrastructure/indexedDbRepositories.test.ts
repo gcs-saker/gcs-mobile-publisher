@@ -32,6 +32,18 @@ async function database(): Promise<IDBDatabase> {
   return openPublisherDatabase(new IDBFactory(), `test-${crypto.randomUUID()}`);
 }
 
+function openLegacyDatabase(factory: IDBFactory, name: string): Promise<IDBDatabase> {
+  return new Promise((resolve, reject) => {
+    const request = factory.open(name, 1);
+    request.onupgradeneeded = () => {
+      request.result.createObjectStore("settings");
+      request.result.createObjectStore("telemetryQueue", { keyPath: "id" });
+    };
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error ?? new Error("Legacy database setup failed"));
+  });
+}
+
 describe("IndexedDB repositories", () => {
   it("creates the versioned schema and persists settings", async () => {
     const db = await database();
@@ -48,6 +60,18 @@ describe("IndexedDB repositories", () => {
       streamId: "CID007",
     });
     db.close();
+  });
+
+  it("migrates the legacy queue by adding the creation-order index", async () => {
+    const factory = new IDBFactory();
+    const name = `migration-${crypto.randomUUID()}`;
+    const legacy = await openLegacyDatabase(factory, name);
+    legacy.close();
+
+    const migrated = await openPublisherDatabase(factory, name);
+    const transaction = migrated.transaction("telemetryQueue", "readonly");
+    expect([...transaction.objectStore("telemetryQueue").indexNames]).toContain("createdAt");
+    migrated.close();
   });
 
   it("removes a corrupt settings record instead of leaking an unsafe value", async () => {

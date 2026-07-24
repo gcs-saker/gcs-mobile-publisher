@@ -6,7 +6,7 @@ import type {
   TelemetryQueueRepository,
 } from "../contracts/repositories";
 
-const DATABASE_VERSION = 1;
+const DATABASE_VERSION = 2;
 const SETTINGS_STORE = "settings";
 const TELEMETRY_STORE = "telemetryQueue";
 const CREATED_AT_INDEX = "createdAt";
@@ -115,8 +115,10 @@ export function openPublisherDatabase(
       if (!database.objectStoreNames.contains(SETTINGS_STORE)) {
         database.createObjectStore(SETTINGS_STORE);
       }
-      if (!database.objectStoreNames.contains(TELEMETRY_STORE)) {
-        const queue = database.createObjectStore(TELEMETRY_STORE, { keyPath: "id" });
+      const queue = database.objectStoreNames.contains(TELEMETRY_STORE)
+        ? request.transaction?.objectStore(TELEMETRY_STORE)
+        : database.createObjectStore(TELEMETRY_STORE, { keyPath: "id" });
+      if (queue && !queue.indexNames.contains(CREATED_AT_INDEX)) {
         queue.createIndex(CREATED_AT_INDEX, "createdAt", { unique: false });
       }
     };
