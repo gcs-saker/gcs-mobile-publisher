@@ -80,3 +80,4 @@ telemetry DTO를 확장하거나 모바일 전용 ingest endpoint를 추가해�
 - [Git workflow와 tag 정책](docs/git-workflow.md)
 - [Frontend architecture](docs/frontend-architecture.md)
 - [순서가 있는 Issue backlog](docs/issue-backlog.md)
+- [고정 실행 순서와 PR queue](docs/roadmap.md)
