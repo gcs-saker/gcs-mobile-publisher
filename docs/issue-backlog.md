@@ -29,6 +29,7 @@ PR은 표의 범위를 기계적으로 한 번에 합치는 단위가 아닙니�
 
 ### MOB-01 Enforce CI quality gates
 
+- 상태: 구현 완료, PR 대기
 - 유형: Chore
 - 선행: MOB-00
 - 목적: 모든 PR에서 typecheck, unit test, build, diff hygiene를 자동 검증합니다.
