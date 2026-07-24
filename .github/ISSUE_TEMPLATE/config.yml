@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Architecture and contribution rules
+    url: https://github.com/gcs-saker/gcs-mobile-publisher/blob/main/CONTRIBUTING.md
+    about: 작업 시작 전 개발 및 Git 규칙을 확인합니다.

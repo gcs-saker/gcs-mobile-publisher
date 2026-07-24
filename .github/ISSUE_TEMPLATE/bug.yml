@@ -1,0 +1,47 @@
+name: Bug
+description: 재현 가능한 결함 수정
+title: "[Bug] "
+labels: ["type:bug", "status:triage"]
+body:
+  - type: textarea
+    id: symptom
+    attributes:
+      label: 증상
+      description: 사용자가 관찰한 결과를 작성합니다.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: 재현 절차
+      placeholder: |
+        1. Android Chrome에서...
+        2. LTE에서 Wi-Fi로...
+        3. ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: 기대 결과
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: 기기와 환경
+      placeholder: Galaxy S23 / Android 15 / Chrome 138 / LTE
+    validations:
+      required: true
+  - type: textarea
+    id: regression
+    attributes:
+      label: 실패 테스트
+      description: 수정 전에 추가할 재현 테스트를 작성합니다.
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: 로그와 증거
+      description: 토큰·정확한 GPS·개인정보를 제거한 자료만 첨부합니다.

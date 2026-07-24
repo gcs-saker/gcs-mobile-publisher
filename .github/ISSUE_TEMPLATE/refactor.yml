@@ -1,0 +1,33 @@
+name: Refactor
+description: 동작을 유지하는 구조 개선
+title: "[Refactor] "
+labels: ["type:refactor", "status:triage"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: 현재 구조의 문제
+      description: 결합도, 중복, OCP/DI 위반을 구체적으로 작성합니다.
+    validations:
+      required: true
+  - type: textarea
+    id: boundary
+    attributes:
+      label: 목표 경계
+      description: 이동할 기능/UI 계층과 새 port/adapter 경계를 작성합니다.
+    validations:
+      required: true
+  - type: textarea
+    id: invariants
+    attributes:
+      label: 유지해야 할 동작
+      description: 리팩터링 전후 동일해야 하는 테스트와 계약을 작성합니다.
+    validations:
+      required: true
+  - type: textarea
+    id: exclusions
+    attributes:
+      label: 제외 범위
+      description: 이 작업에서 기능 변경이 아님을 명확히 합니다.
+    validations:
+      required: true
