@@ -24,6 +24,7 @@ export function PublisherStoreProvider({ children, store }: PublisherStoreProvid
   const storeRef = useRef<PublisherStore | null>(null);
   if (!storeRef.current) {
     storeRef.current = store ?? createPublisherStore({
+      generation: 0,
       isOnline: runtime.network.online,
       mediaReady: false,
       message: "송출 준비를 눌러 카메라와 센서를 시작하세요.",
