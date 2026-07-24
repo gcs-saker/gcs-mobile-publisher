@@ -6,11 +6,18 @@
     "moduleResolution": "Bundler",
     "jsx": "react-jsx",
     "strict": true,
+    "exactOptionalPropertyTypes": true,
+    "noImplicitOverride": true,
+    "noPropertyAccessFromIndexSignature": true,
+    "noUncheckedIndexedAccess": true,
     "noEmit": true,
     "skipLibCheck": true,
     "isolatedModules": true,
     "noFallthroughCasesInSwitch": true,
     "noImplicitReturns": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "useUnknownInCatchVariables": true,
     "types": ["node", "vite/client", "vitest/globals"]
   },
   "include": ["src", "vite.config.ts"]

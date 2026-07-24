@@ -43,7 +43,9 @@ export async function applyVideoQuality(
   if (!sender) return;
   const parameters = sender.getParameters();
   parameters.encodings = parameters.encodings?.length ? parameters.encodings : [{}];
-  parameters.encodings[0].maxBitrate = profile.maxBitrate;
+  const [encoding] = parameters.encodings;
+  if (!encoding) return;
+  encoding.maxBitrate = profile.maxBitrate;
   await sender.setParameters(parameters);
 }
 
