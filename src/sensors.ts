@@ -1,4 +1,5 @@
 import type { SensorSnapshot, TelemetryPayload } from "./types";
+import type { Clock } from "./app/ports";
 
 export const emptySnapshot: SensorSnapshot = {
   capturedAt: new Date(0).toISOString(),
@@ -14,11 +15,13 @@ export function buildTelemetryPayload(
   streamId: string,
   startedAt: number,
   snapshot: SensorSnapshot,
+  clock: Clock,
+  userAgent: string,
 ): TelemetryPayload {
   return {
     ...snapshot,
     uuid: streamId,
-    epochTime: Math.max(0, Math.floor((Date.now() - startedAt) / 1000)),
-    userAgent: navigator.userAgent,
+    epochTime: Math.max(0, Math.floor((clock.now() - startedAt) / 1000)),
+    userAgent,
   };
 }

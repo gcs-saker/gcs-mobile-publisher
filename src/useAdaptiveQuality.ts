@@ -5,11 +5,13 @@ import {
   selectQuality,
   type VideoQuality,
 } from "./quality";
+import type { Scheduler } from "./app/ports";
 
 export function useAdaptiveQuality(
   pc: RTCPeerConnection | null,
   media: MediaStream | null,
   active: boolean,
+  scheduler: Scheduler,
 ) {
   const [quality, setQuality] = useState<VideoQuality>("high");
 
@@ -27,12 +29,12 @@ export function useAdaptiveQuality(
         // Stats and sender parameter support varies; keep the current profile.
       }
     };
-    const id = window.setInterval(() => void inspect(), 5_000);
+    const id = scheduler.setInterval(() => void inspect(), 5_000);
     return () => {
       cancelled = true;
-      window.clearInterval(id);
+      scheduler.clearInterval(id);
     };
-  }, [active, media, pc, quality]);
+  }, [active, media, pc, quality, scheduler]);
 
   return quality;
 }

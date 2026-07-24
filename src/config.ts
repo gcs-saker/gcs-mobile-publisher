@@ -3,12 +3,3 @@ export const config = {
   telemetryUrl: import.meta.env.VITE_TELEMETRY_URL || "/api/telemetry/",
   defaultStreamId: import.meta.env.VITE_DEFAULT_STREAM_ID || "CID001",
 };
-
-export function loadAccessToken(): string {
-  return sessionStorage.getItem("gcs.accessToken") || "";
-}
-
-export function saveAccessToken(token: string): void {
-  if (token) sessionStorage.setItem("gcs.accessToken", token);
-  else sessionStorage.removeItem("gcs.accessToken");
-}

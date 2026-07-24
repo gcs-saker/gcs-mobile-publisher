@@ -1,11 +1,14 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./App";
+import { RuntimeProvider } from "./app/RuntimeProvider";
 import "./styles.css";
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
-    <App />
+    <RuntimeProvider>
+      <App />
+    </RuntimeProvider>
   </StrictMode>,
 );
 
