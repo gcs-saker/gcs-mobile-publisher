@@ -1,5 +1,50 @@
+# Dependencies
 node_modules/
+.pnpm-store/
+
+# Build and test output
 dist/
+coverage/
+.vite/
+.vitest/
+test-results/
+playwright-report/
+*.tsbuildinfo
+
+# Runtime configuration and secrets
 .env
+.env.*
+!.env.example
 *.local
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+
+# Logs and temporary files
+logs/
+*.log
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+tmp/
+temp/
+*.tmp
+
+# IDE and OS metadata
+.idea/
+.vscode/
+*.swp
+*.swo
 .DS_Store
+Thumbs.db
+Desktop.ini
+
+# Local tooling and AI workspace state
+.cache/
+.turbo/
+.eslintcache
+.agents/
+.codex/
