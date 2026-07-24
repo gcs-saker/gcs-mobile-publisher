@@ -122,6 +122,10 @@ export function App() {
 
   return (
     <main className="app">
+      <aside className="landscape-notice" role="status">
+        <strong>휴대폰을 세로로 돌려주세요</strong>
+        <span>안정적인 송출 조작을 위해 세로 화면을 사용합니다.</span>
+      </aside>
       <video ref={videoRef} className="camera" autoPlay muted playsInline />
       <div className="shade" />
 
@@ -154,7 +158,7 @@ export function App() {
         <div><span>속도</span><strong>{snapshot.location.speed !== null ? `${(snapshot.location.speed * 3.6).toFixed(1)} km/h` : "—"}</strong></div>
       </section>
 
-      <section className="control-sheet">
+      <section className="control-sheet" aria-label="송출 제어">
         <div className="fields">
           <label>
             <span>스트림 ID</span>
