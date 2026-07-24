@@ -1,12 +1,14 @@
+import type { PeerConnectionFactory, Scheduler } from "./app/ports";
+
 const ICE_TIMEOUT_MS = 8_000;
 const CONNECT_TIMEOUT_MS = 15_000;
 
-function waitForIce(pc: RTCPeerConnection): Promise<void> {
+function waitForIce(pc: RTCPeerConnection, scheduler: Scheduler): Promise<void> {
   if (pc.iceGatheringState === "complete") return Promise.resolve();
   return new Promise((resolve) => {
-    const timeout = window.setTimeout(done, ICE_TIMEOUT_MS);
+    const timeout = scheduler.setTimeout(done, ICE_TIMEOUT_MS);
     function done(): void {
-      window.clearTimeout(timeout);
+      scheduler.clearTimeout(timeout);
       pc.removeEventListener("icegatheringstatechange", change);
       resolve();
     }
@@ -17,15 +19,15 @@ function waitForIce(pc: RTCPeerConnection): Promise<void> {
   });
 }
 
-function waitForConnection(pc: RTCPeerConnection): Promise<void> {
+function waitForConnection(pc: RTCPeerConnection, scheduler: Scheduler): Promise<void> {
   if (pc.connectionState === "connected") return Promise.resolve();
   return new Promise((resolve, reject) => {
-    const timeout = window.setTimeout(
+    const timeout = scheduler.setTimeout(
       () => finish(new Error("WebRTC 연결 시간이 초과됐습니다.")),
       CONNECT_TIMEOUT_MS,
     );
     function finish(error?: Error): void {
-      window.clearTimeout(timeout);
+      scheduler.clearTimeout(timeout);
       pc.removeEventListener("connectionstatechange", change);
       if (error) reject(error);
       else resolve();
@@ -45,15 +47,18 @@ export async function createWhipSession(
   whipUrl: string,
   iceServers: RTCIceServer[],
   onConnectionChange: (state: RTCPeerConnectionState) => void,
+  fetcher: typeof fetch,
+  peerConnections: PeerConnectionFactory,
+  scheduler: Scheduler,
 ): Promise<RTCPeerConnection> {
-  const pc = new RTCPeerConnection({ iceServers });
+  const pc = peerConnections.create({ iceServers });
   pc.addEventListener("connectionstatechange", () => onConnectionChange(pc.connectionState));
   media.getTracks().forEach((track) => pc.addTrack(track, media));
   const offer = await pc.createOffer();
   await pc.setLocalDescription(offer);
-  await waitForIce(pc);
+  await waitForIce(pc, scheduler);
   if (!pc.localDescription?.sdp) throw new Error("WebRTC SDP 생성에 실패했습니다.");
-  const response = await fetch(whipUrl, {
+  const response = await fetcher(whipUrl, {
     method: "POST",
     headers: { "Content-Type": "application/sdp", Accept: "application/sdp" },
     body: pc.localDescription.sdp,
@@ -63,6 +68,6 @@ export async function createWhipSession(
     throw new Error(`WHIP 연결 실패 (${response.status})`);
   }
   await pc.setRemoteDescription({ type: "answer", sdp: await response.text() });
-  await waitForConnection(pc);
+  await waitForConnection(pc, scheduler);
   return pc;
 }

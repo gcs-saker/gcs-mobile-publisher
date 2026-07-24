@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { authorizePublish, sendTelemetry } from "./api";
-import { config, loadAccessToken, saveAccessToken } from "./config";
+import { config } from "./config";
 import { buildTelemetryPayload } from "./sensors";
 import type { PublisherStatus } from "./types";
+import { useRuntime } from "./app/RuntimeProvider";
 import { useAdaptiveQuality } from "./useAdaptiveQuality";
 import { useDeviceSensors } from "./useDeviceSensors";
 import { usePwaInstall } from "./usePwaInstall";
@@ -20,14 +21,15 @@ const STATUS_LABEL: Record<PublisherStatus, string> = {
 };
 
 export function App() {
+  const runtime = useRuntime();
   const [streamId, setStreamId] = useState(config.defaultStreamId);
-  const [token, setToken] = useState(loadAccessToken);
+  const [token, setToken] = useState(() => runtime.sessionStore.get("gcs.accessToken") || "");
   const [status, setStatus] = useState<PublisherStatus>("idle");
   const [message, setMessage] = useState("송출 준비를 눌러 카메라와 센서를 시작하세요.");
   const [muted, setMuted] = useState(false);
   const [media, setMedia] = useState<MediaStream | null>(null);
   const [peerConnection, setPeerConnection] = useState<RTCPeerConnection | null>(null);
-  const [isOnline, setIsOnline] = useState(navigator.onLine);
+  const [isOnline, setIsOnline] = useState(runtime.network.online);
   const videoRef = useRef<HTMLVideoElement>(null);
   const mediaRef = useRef<MediaStream | null>(null);
   const pcRef = useRef<RTCPeerConnection | null>(null);
@@ -36,16 +38,18 @@ export function App() {
   const reconnectAttemptRef = useRef(0);
   const publishRef = useRef<() => Promise<void>>(async () => undefined);
   const startedAtRef = useRef(0);
-  const { snapshot, error: sensorError, start: startSensors, stop: stopSensors } = useDeviceSensors();
-  const quality = useAdaptiveQuality(peerConnection, media, status === "live");
+  const { snapshot, error: sensorError, start: startSensors, stop: stopSensors } = useDeviceSensors(runtime);
+  const quality = useAdaptiveQuality(peerConnection, media, status === "live", runtime.scheduler);
   const { canInstall, install, isInstalled } = usePwaInstall();
 
   const prepare = useCallback(async () => {
     try {
       setStatus("requesting");
-      saveAccessToken(token.trim());
+      if (token.trim()) runtime.sessionStore.set("gcs.accessToken", token.trim());
+      else runtime.sessionStore.remove("gcs.accessToken");
       mediaRef.current?.getTracks().forEach((track) => track.stop());
-      const media = await navigator.mediaDevices.getUserMedia({
+      if (!runtime.mediaDevices) throw new Error("이 기기에서는 카메라를 사용할 수 없습니다.");
+      const media = await runtime.mediaDevices.getUserMedia({
         video: {
           facingMode: { ideal: "environment" },
           width: { ideal: 1280 },
@@ -62,20 +66,20 @@ export function App() {
       setMedia(media);
       if (videoRef.current) videoRef.current.srcObject = media;
       await startSensors();
-      if (navigator.wakeLock) wakeLockRef.current = await navigator.wakeLock.request("screen");
+      wakeLockRef.current = await runtime.wakeLock.request();
       setStatus("preview");
       setMessage("후면 카메라와 센서가 준비됐습니다.");
     } catch (reason) {
       setStatus("error");
       setMessage(reason instanceof Error ? reason.message : "기기 권한을 받을 수 없습니다.");
     }
-  }, [startSensors, token]);
+  }, [runtime, startSensors, token]);
 
   const publish = useCallback(async () => {
     if (!mediaRef.current) return;
     try {
       setStatus("authorizing");
-      const authorization = await authorizePublish(streamId.trim(), token.trim());
+      const authorization = await authorizePublish(streamId.trim(), token.trim(), runtime.fetch);
       setStatus("connecting");
       pcRef.current?.close();
       const connection = await createWhipSession(
@@ -89,22 +93,25 @@ export function App() {
             if (reconnectTimerRef.current === null) {
               const delay = Math.min(15_000, 1_000 * 2 ** reconnectAttemptRef.current);
               reconnectAttemptRef.current += 1;
-              reconnectTimerRef.current = window.setTimeout(() => {
+              reconnectTimerRef.current = runtime.scheduler.setTimeout(() => {
                 reconnectTimerRef.current = null;
-                if (navigator.onLine && mediaRef.current) void publishRef.current();
+                if (runtime.network.online && mediaRef.current) void publishRef.current();
               }, delay);
             }
           }
         },
+        runtime.fetch,
+        runtime.peerConnections,
+        runtime.scheduler,
       );
       pcRef.current = connection;
       setPeerConnection(connection);
-      startedAtRef.current = Date.now();
+      startedAtRef.current = runtime.clock.now();
       reconnectAttemptRef.current = 0;
       setStatus("live");
       setMessage("영상과 현장 센서를 송출하고 있습니다.");
     } catch (reason) {
-      if (mediaRef.current && !navigator.onLine) {
+      if (mediaRef.current && !runtime.network.online) {
         setStatus("reconnecting");
         setMessage("네트워크 연결을 기다리고 있습니다.");
       } else {
@@ -112,10 +119,10 @@ export function App() {
         setMessage(reason instanceof Error ? reason.message : "송출을 시작하지 못했습니다.");
       }
     }
-  }, [streamId, token]);
+  }, [runtime, streamId, token]);
 
   const stop = useCallback(() => {
-    if (reconnectTimerRef.current !== null) window.clearTimeout(reconnectTimerRef.current);
+    if (reconnectTimerRef.current !== null) runtime.scheduler.clearTimeout(reconnectTimerRef.current);
     reconnectTimerRef.current = null;
     reconnectAttemptRef.current = 0;
     pcRef.current?.close();
@@ -130,7 +137,7 @@ export function App() {
     wakeLockRef.current = null;
     setStatus("idle");
     setMessage("송출을 종료했습니다.");
-  }, [stopSensors]);
+  }, [runtime.scheduler, stopSensors]);
 
   useEffect(() => {
     publishRef.current = publish;
@@ -151,26 +158,28 @@ export function App() {
         setMessage("네트워크가 끊겼습니다. 연결 복구를 기다립니다.");
       }
     };
-    window.addEventListener("online", online);
-    window.addEventListener("offline", offline);
-    return () => {
-      window.removeEventListener("online", online);
-      window.removeEventListener("offline", offline);
-    };
-  }, [status]);
+    return runtime.network.subscribe(online, offline);
+  }, [runtime.network, status]);
 
   useEffect(() => {
     if (status !== "live") return;
-    const id = window.setInterval(() => {
+    const id = runtime.scheduler.setInterval(() => {
       void sendTelemetry(
-        buildTelemetryPayload(streamId, startedAtRef.current, snapshot),
+        buildTelemetryPayload(
+          streamId,
+          startedAtRef.current,
+          snapshot,
+          runtime.clock,
+          runtime.userAgent,
+        ),
         token,
+        runtime.fetch,
       ).catch((reason: unknown) => {
         setMessage(reason instanceof Error ? reason.message : "센서 전송 오류");
       });
     }, 2_000);
-    return () => window.clearInterval(id);
-  }, [snapshot, status, streamId, token]);
+    return () => runtime.scheduler.clearInterval(id);
+  }, [runtime, snapshot, status, streamId, token]);
 
   useEffect(() => stop, [stop]);
 

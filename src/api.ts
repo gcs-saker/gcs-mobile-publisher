@@ -8,10 +8,11 @@ function authHeaders(token: string): HeadersInit {
 export async function authorizePublish(
   streamId: string,
   token: string,
+  fetcher: typeof fetch,
   signal?: AbortSignal,
 ): Promise<PublishAuthorization> {
   const base = config.streamApiBaseUrl.replace(/\/$/, "");
-  const response = await fetch(
+  const response = await fetcher(
     `${base}/api/v1/streams/${encodeURIComponent(streamId)}/publish`,
     { headers: { Accept: "application/json", ...authHeaders(token) }, signal },
   );
@@ -24,8 +25,9 @@ export async function authorizePublish(
 export async function sendTelemetry(
   payload: TelemetryPayload,
   token: string,
+  fetcher: typeof fetch,
 ): Promise<void> {
-  const response = await fetch(config.telemetryUrl, {
+  const response = await fetcher(config.telemetryUrl, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
