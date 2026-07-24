@@ -10,12 +10,17 @@ import {
   usePublisherStore,
   usePublisherStoreApi,
 } from "../application/PublisherStoreProvider";
+import {
+  transitionPublisher,
+  type PublisherEvent,
+  type PublisherTransition,
+} from "../domain/publisherMachine";
 
 export function usePublisherController() {
   const runtime = useRuntime();
   const store = usePublisherStoreApi();
   const state = usePublisherStore((snapshot) => snapshot);
-  const { isOnline, mediaReady, message, muted, quality, status, streamId, token } = state;
+  const { generation, isOnline, mediaReady, message, muted, quality, status, streamId, token } = state;
   const [media, setMedia] = useState<MediaStream | null>(null);
   const [peerConnection, setPeerConnection] = useState<RTCPeerConnection | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -34,10 +39,26 @@ export function usePublisherController() {
   } = useDeviceSensors(runtime);
   const adaptiveQuality = useAdaptiveQuality(peerConnection, media, status === "live", runtime.scheduler);
   const pwa = usePwaInstall();
+  const dispatch = useCallback((event: PublisherEvent): PublisherTransition => {
+    const current = store.getSnapshot();
+    const result = transitionPublisher(
+      { generation: current.generation, status: current.status },
+      event,
+    );
+    if (result.accepted) {
+      store.setState({
+        generation: result.state.generation,
+        status: result.state.status,
+      });
+    }
+    return result;
+  }, [store]);
 
   const prepare = useCallback(async () => {
+    const requested = dispatch({ type: "PREPARE_REQUESTED" });
+    if (!requested.accepted) return;
+    const activeGeneration = requested.state.generation;
     try {
-      store.setState({ status: "requesting" });
       if (token.trim()) runtime.sessionStore.set("gcs.accessToken", token.trim());
       else runtime.sessionStore.remove("gcs.accessToken");
       mediaRef.current?.getTracks().forEach((track) => track.stop());
@@ -55,30 +76,38 @@ export function usePublisherController() {
           autoGainControl: true,
         },
       });
+      const preview = dispatch({ type: "PREVIEW_READY", generation: activeGeneration });
+      if (!preview.accepted) {
+        nextMedia.getTracks().forEach((track) => track.stop());
+        return;
+      }
       mediaRef.current = nextMedia;
       setMedia(nextMedia);
       store.setState({ mediaReady: true });
       if (videoRef.current) videoRef.current.srcObject = nextMedia;
       await startSensors();
       wakeLockRef.current = await runtime.wakeLock.request();
-      store.setState({
-        status: "preview",
-        message: "후면 카메라와 센서가 준비됐습니다.",
-      });
+      store.setState({ message: "후면 카메라와 센서가 준비됐습니다." });
     } catch (reason) {
+      const failure = dispatch({ type: "FAILED", generation: activeGeneration });
+      if (!failure.accepted) return;
       store.setState({
-        status: "error",
         message: reason instanceof Error ? reason.message : "기기 권한을 받을 수 없습니다.",
       });
     }
-  }, [runtime, startSensors, store, token]);
+  }, [dispatch, runtime, startSensors, store, token]);
 
   const publish = useCallback(async () => {
     if (!mediaRef.current) return;
+    const activeGeneration = store.getSnapshot().generation;
+    const requested = status === "reconnecting"
+      ? dispatch({ type: "RETRY_REQUESTED", generation: activeGeneration })
+      : dispatch({ type: "PUBLISH_REQUESTED", generation: activeGeneration });
+    if (!requested.accepted) return;
     try {
-      store.setState({ status: "authorizing" });
       const authorization = await authorizePublish(streamId.trim(), token.trim(), runtime.fetch);
-      store.setState({ status: "connecting" });
+      const authorized = dispatch({ type: "AUTHORIZED", generation: activeGeneration });
+      if (!authorized.accepted) return;
       peerConnectionRef.current?.close();
       const connection = await createWhipSession(
         mediaRef.current,
@@ -86,10 +115,9 @@ export function usePublisherController() {
         authorization.iceServers,
         (state) => {
           if (state !== "disconnected" && state !== "failed") return;
-          store.setState({
-            status: "reconnecting",
-            message: "네트워크 연결을 복구하고 있습니다.",
-          });
+          const lost = dispatch({ type: "CONNECTION_LOST", generation: activeGeneration });
+          if (!lost.accepted) return;
+          store.setState({ message: "네트워크 연결을 복구하고 있습니다." });
           if (reconnectTimerRef.current !== null) return;
           const delay = Math.min(15_000, 1_000 * 2 ** reconnectAttemptRef.current);
           reconnectAttemptRef.current += 1;
@@ -102,30 +130,35 @@ export function usePublisherController() {
         runtime.peerConnections,
         runtime.scheduler,
       );
+      const connected = dispatch({ type: "CONNECTED", generation: activeGeneration });
+      if (!connected.accepted) {
+        connection.close();
+        return;
+      }
       peerConnectionRef.current = connection;
       setPeerConnection(connection);
       startedAtRef.current = runtime.clock.now();
       reconnectAttemptRef.current = 0;
-      store.setState({
-        status: "live",
-        message: "영상과 현장 센서를 송출하고 있습니다.",
-      });
+      store.setState({ message: "영상과 현장 센서를 송출하고 있습니다." });
     } catch (reason) {
       if (mediaRef.current && !runtime.network.online) {
-        store.setState({
-          status: "reconnecting",
-          message: "네트워크 연결을 기다리고 있습니다.",
-        });
+        const lost = dispatch({ type: "CONNECTION_LOST", generation: activeGeneration });
+        if (lost.accepted) {
+          store.setState({ message: "네트워크 연결을 기다리고 있습니다." });
+        }
       } else {
-        store.setState({
-          status: "error",
-          message: reason instanceof Error ? reason.message : "송출을 시작하지 못했습니다.",
-        });
+        const failure = dispatch({ type: "FAILED", generation: activeGeneration });
+        if (failure.accepted) {
+          store.setState({
+            message: reason instanceof Error ? reason.message : "송출을 시작하지 못했습니다.",
+          });
+        }
       }
     }
-  }, [runtime, store, streamId, token]);
+  }, [dispatch, runtime, status, store, streamId, token]);
 
   const stop = useCallback(() => {
+    dispatch({ type: "STOPPED" });
     if (reconnectTimerRef.current !== null) {
       runtime.scheduler.clearTimeout(reconnectTimerRef.current);
     }
@@ -142,11 +175,8 @@ export function usePublisherController() {
     stopSensors();
     void wakeLockRef.current?.release();
     wakeLockRef.current = null;
-    store.setState({
-      status: "idle",
-      message: "송출을 종료했습니다.",
-    });
-  }, [runtime.scheduler, stopSensors, store]);
+    store.setState({ message: "송출을 종료했습니다." });
+  }, [dispatch, runtime.scheduler, stopSensors, store]);
 
   const toggleMute = useCallback(() => {
     const nextMuted = !store.getSnapshot().muted;
@@ -175,13 +205,13 @@ export function usePublisherController() {
     () => {
       store.setState({ isOnline: false });
       if (mediaRef.current) {
-        store.setState({
-          status: "reconnecting",
-          message: "네트워크가 끊겼습니다. 연결 복구를 기다립니다.",
-        });
+        const lost = dispatch({ type: "CONNECTION_LOST", generation });
+        if (lost.accepted) {
+          store.setState({ message: "네트워크가 끊겼습니다. 연결 복구를 기다립니다." });
+        }
       }
     },
-  ), [runtime.network, status, store]);
+  ), [dispatch, generation, runtime.network, status, store]);
 
   useEffect(() => {
     if (status !== "live") return;

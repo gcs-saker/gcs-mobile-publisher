@@ -2,6 +2,7 @@ import type { PublisherStatus } from "../../../types";
 import type { VideoQuality } from "../../../quality";
 
 export interface PublisherState {
+  generation: number;
   isOnline: boolean;
   mediaReady: boolean;
   message: string;
