@@ -76,6 +76,10 @@ button, input { font: inherit; }
 .topbar__title strong { font-size: 13px; letter-spacing: .12em; }
 .topbar__title span { color: #a9b8b1; font-size: 11px; }
 .battery { color: #bceacc; }
+.topbar__health { display: grid; justify-items: end; gap: 4px; }
+.network { font-size: 9px; font-weight: 800; letter-spacing: .08em; }
+.network--online { color: #6eea94; }
+.network--offline { color: #ff8189; }
 
 .level {
   position: relative;
@@ -152,6 +156,27 @@ button, input { font: inherit; }
 }
 
 .fields { display: grid; grid-template-columns: 1fr 1.35fr; gap: 8px; }
+.runtime-strip {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  min-height: 28px;
+  margin-bottom: 9px;
+  color: #8fa198;
+  font-size: 10px;
+}
+.runtime-strip strong { color: #dce9e1; }
+.runtime-strip button {
+  min-height: 28px;
+  margin-left: auto;
+  border: 1px solid #426151;
+  border-radius: 999px;
+  padding: 4px 10px;
+  color: #bceacc;
+  background: #102219;
+  font-size: 10px;
+  font-weight: 800;
+}
 .fields label { display: grid; gap: 5px; }
 .fields span { color: #8fa198; font-size: 10px; }
 .fields input {

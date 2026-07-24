@@ -3,7 +3,9 @@ import { authorizePublish, sendTelemetry } from "./api";
 import { config, loadAccessToken, saveAccessToken } from "./config";
 import { buildTelemetryPayload } from "./sensors";
 import type { PublisherStatus } from "./types";
+import { useAdaptiveQuality } from "./useAdaptiveQuality";
 import { useDeviceSensors } from "./useDeviceSensors";
+import { usePwaInstall } from "./usePwaInstall";
 import { createWhipSession } from "./whip";
 
 const STATUS_LABEL: Record<PublisherStatus, string> = {
@@ -23,12 +25,20 @@ export function App() {
   const [status, setStatus] = useState<PublisherStatus>("idle");
   const [message, setMessage] = useState("송출 준비를 눌러 카메라와 센서를 시작하세요.");
   const [muted, setMuted] = useState(false);
+  const [media, setMedia] = useState<MediaStream | null>(null);
+  const [peerConnection, setPeerConnection] = useState<RTCPeerConnection | null>(null);
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
   const videoRef = useRef<HTMLVideoElement>(null);
   const mediaRef = useRef<MediaStream | null>(null);
   const pcRef = useRef<RTCPeerConnection | null>(null);
   const wakeLockRef = useRef<WakeLockSentinel | null>(null);
+  const reconnectTimerRef = useRef<number | null>(null);
+  const reconnectAttemptRef = useRef(0);
+  const publishRef = useRef<() => Promise<void>>(async () => undefined);
   const startedAtRef = useRef(0);
   const { snapshot, error: sensorError, start: startSensors, stop: stopSensors } = useDeviceSensors();
+  const quality = useAdaptiveQuality(peerConnection, media, status === "live");
+  const { canInstall, install, isInstalled } = usePwaInstall();
 
   const prepare = useCallback(async () => {
     try {
@@ -49,6 +59,7 @@ export function App() {
         },
       });
       mediaRef.current = media;
+      setMedia(media);
       if (videoRef.current) videoRef.current.srcObject = media;
       await startSensors();
       if (navigator.wakeLock) wakeLockRef.current = await navigator.wakeLock.request("screen");
@@ -67,32 +78,52 @@ export function App() {
       const authorization = await authorizePublish(streamId.trim(), token.trim());
       setStatus("connecting");
       pcRef.current?.close();
-      pcRef.current = await createWhipSession(
+      const connection = await createWhipSession(
         mediaRef.current,
         authorization.whipUrl,
         authorization.iceServers,
         (state) => {
-          if (state === "disconnected") setStatus("reconnecting");
-          if (state === "failed") {
-            setStatus("error");
-            setMessage("네트워크 연결이 끊겼습니다. 다시 송출해 주세요.");
+          if (state === "disconnected" || state === "failed") {
+            setStatus("reconnecting");
+            setMessage("네트워크 연결을 복구하고 있습니다.");
+            if (reconnectTimerRef.current === null) {
+              const delay = Math.min(15_000, 1_000 * 2 ** reconnectAttemptRef.current);
+              reconnectAttemptRef.current += 1;
+              reconnectTimerRef.current = window.setTimeout(() => {
+                reconnectTimerRef.current = null;
+                if (navigator.onLine && mediaRef.current) void publishRef.current();
+              }, delay);
+            }
           }
         },
       );
+      pcRef.current = connection;
+      setPeerConnection(connection);
       startedAtRef.current = Date.now();
+      reconnectAttemptRef.current = 0;
       setStatus("live");
       setMessage("영상과 현장 센서를 송출하고 있습니다.");
     } catch (reason) {
-      setStatus("error");
-      setMessage(reason instanceof Error ? reason.message : "송출을 시작하지 못했습니다.");
+      if (mediaRef.current && !navigator.onLine) {
+        setStatus("reconnecting");
+        setMessage("네트워크 연결을 기다리고 있습니다.");
+      } else {
+        setStatus("error");
+        setMessage(reason instanceof Error ? reason.message : "송출을 시작하지 못했습니다.");
+      }
     }
   }, [streamId, token]);
 
   const stop = useCallback(() => {
+    if (reconnectTimerRef.current !== null) window.clearTimeout(reconnectTimerRef.current);
+    reconnectTimerRef.current = null;
+    reconnectAttemptRef.current = 0;
     pcRef.current?.close();
     pcRef.current = null;
+    setPeerConnection(null);
     mediaRef.current?.getTracks().forEach((track) => track.stop());
     mediaRef.current = null;
+    setMedia(null);
     if (videoRef.current) videoRef.current.srcObject = null;
     stopSensors();
     void wakeLockRef.current?.release();
@@ -100,6 +131,33 @@ export function App() {
     setStatus("idle");
     setMessage("송출을 종료했습니다.");
   }, [stopSensors]);
+
+  useEffect(() => {
+    publishRef.current = publish;
+  }, [publish]);
+
+  useEffect(() => {
+    const online = () => {
+      setIsOnline(true);
+      if (mediaRef.current && (status === "reconnecting" || status === "error")) {
+        setMessage("네트워크가 복구되어 송출을 다시 연결합니다.");
+        void publishRef.current();
+      }
+    };
+    const offline = () => {
+      setIsOnline(false);
+      if (mediaRef.current) {
+        setStatus("reconnecting");
+        setMessage("네트워크가 끊겼습니다. 연결 복구를 기다립니다.");
+      }
+    };
+    window.addEventListener("online", online);
+    window.addEventListener("offline", offline);
+    return () => {
+      window.removeEventListener("online", online);
+      window.removeEventListener("offline", offline);
+    };
+  }, [status]);
 
   useEffect(() => {
     if (status !== "live") return;
@@ -135,7 +193,12 @@ export function App() {
           <strong>GCS FIELD</strong>
           <span>{streamId || "STREAM ID"}</span>
         </div>
-        <div className="battery" aria-label="배터리 상태">{batteryText}</div>
+        <div className="topbar__health">
+          <span className={isOnline ? "network network--online" : "network network--offline"}>
+            {isOnline ? "온라인" : "오프라인"}
+          </span>
+          <div className="battery" aria-label="배터리 상태">{batteryText}</div>
+        </div>
       </header>
 
       <section className="level" aria-label="기기 기울기">
@@ -159,6 +222,11 @@ export function App() {
       </section>
 
       <section className="control-sheet" aria-label="송출 제어">
+        <div className="runtime-strip">
+          <span>화질 <strong>{quality === "high" ? "720p" : quality === "medium" ? "540p" : "360p"}</strong></span>
+          <span>PWA <strong>{isInstalled ? "설치됨" : "브라우저"}</strong></span>
+          {canInstall ? <button onClick={() => void install()}>앱 설치</button> : null}
+        </div>
         <div className="fields">
           <label>
             <span>스트림 ID</span>

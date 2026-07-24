@@ -11,6 +11,9 @@ Android Chrome을 대상으로 한 GCS 현장 송출 전용 모바일 웹/PWA입
 - 배터리 잔량 및 충전 상태
 - Screen Wake Lock으로 송출 중 화면 꺼짐 완화
 - 기존 `media-control` publish authorization 계약 연동
+- LTE/Wi-Fi 단절 및 복구 감지, 지수 백오프 자동 재연결
+- WebRTC 통계 기반 `720p → 540p → 360p` 적응형 업로드 품질
+- Android 홈 화면 설치와 앱 셸 캐시
 
 ## 요구 사항
 
@@ -67,3 +70,6 @@ Authorization: Bearer <access token>
 센서 텔레메트리는 기본적으로 `POST /api/telemetry/`에 2초 간격으로 전송합니다. 기존
 백엔드가 확장 필드를 아직 허용하지 않는 경우 orientation/battery 필드를 수용하도록
 telemetry DTO를 확장하거나 모바일 전용 ingest endpoint를 추가해야 합니다.
+
+구체적인 서버 계약과 백엔드 작업은
+[`docs/telemetry-contract.md`](docs/telemetry-contract.md)에 정리되어 있습니다.
