@@ -10,7 +10,7 @@ importers:
     dependencies:
       '@vitejs/plugin-react':
         specifier: 5.2.0
-        version: 5.2.0(vite@8.0.16)
+        version: 5.2.0(vite@8.0.16(@types/node@24.10.0))
       react:
         specifier: 19.2.6
         version: 19.2.6
@@ -22,8 +22,11 @@ importers:
         version: 6.0.3
       vite:
         specifier: 8.0.16
-        version: 8.0.16
+        version: 8.0.16(@types/node@24.10.0)
     devDependencies:
+      '@types/node':
+        specifier: 24.10.0
+        version: 24.10.0
       '@types/react':
         specifier: 19.2.7
         version: 19.2.7
@@ -32,7 +35,7 @@ importers:
         version: 19.2.3(@types/react@19.2.7)
       vitest:
         specifier: 4.1.7
-        version: 4.1.7(vite@8.0.16)
+        version: 4.1.7(@types/node@24.10.0)(vite@8.0.16(@types/node@24.10.0))
 
 packages:
 
@@ -280,6 +283,9 @@ packages:
 
   '@types/estree@1.0.9':
     resolution: {integrity: sha512-GhdPgy1el4/ImP05X05Uw4cw2/M93BCUmnEvWZNStlCzEKME4Fkk+YpoA5OiHNQmoS7Cafb8Xa3Pya8m1Qrzeg==}
+
+  '@types/node@24.10.0':
+    resolution: {integrity: sha512-qzQZRBqkFsYyaSWXuEHc2WR9c0a0CXwiE5FWUvn7ZM+vdy1uZLfCunD38UzhuB7YN/J11ndbDBcTmOdxJo9Q7A==}
 
   '@types/react-dom@19.2.3':
     resolution: {integrity: sha512-jp2L/eY6fn+KgVVQAOqYItbF0VY/YApe5Mz2F0aykSO8gx31bYCZyvSeYxCHKvzHG5eZjc+zyaS5BrBWya2+kQ==}
@@ -582,6 +588,9 @@ packages:
     resolution: {integrity: sha512-y2TvuxSZPDyQakkFRPZHKFm+KKVqIisdg9/CZwm9ftvKXLP8NRWj38/ODjNbr43SsoXqNuAisEf1GdCxqWcdBw==}
     engines: {node: '>=14.17'}
     hasBin: true
+
+  undici-types@7.16.0:
+    resolution: {integrity: sha512-Zz+aZWSj8LE6zoxD+xrjh4VfkIG8Ya6LvYkZqtUQGJPZjYl53ypCaUwWqo7eI0x66KBGeRo+mlBEkMSeSZ38Nw==}
 
   update-browserslist-db@1.2.3:
     resolution: {integrity: sha512-Js0m9cx+qOgDxo0eMiFGEueWztz+d4+M3rGlmKPT+T4IS/jP4ylw3Nwpu6cpTTP8R1MAC1kF4VbdLt3ARf209w==}
@@ -929,6 +938,10 @@ snapshots:
 
   '@types/estree@1.0.9': {}
 
+  '@types/node@24.10.0':
+    dependencies:
+      undici-types: 7.16.0
+
   '@types/react-dom@19.2.3(@types/react@19.2.7)':
     dependencies:
       '@types/react': 19.2.7
@@ -937,7 +950,7 @@ snapshots:
     dependencies:
       csstype: 3.2.3
 
-  '@vitejs/plugin-react@5.2.0(vite@8.0.16)':
+  '@vitejs/plugin-react@5.2.0(vite@8.0.16(@types/node@24.10.0))':
     dependencies:
       '@babel/core': 7.29.7
       '@babel/plugin-transform-react-jsx-self': 7.29.7(@babel/core@7.29.7)
@@ -945,7 +958,7 @@ snapshots:
       '@rolldown/pluginutils': 1.0.0-rc.3
       '@types/babel__core': 7.20.5
       react-refresh: 0.18.0
-      vite: 8.0.16
+      vite: 8.0.16(@types/node@24.10.0)
     transitivePeerDependencies:
       - supports-color
 
@@ -958,13 +971,13 @@ snapshots:
       chai: 6.2.2
       tinyrainbow: 3.1.0
 
-  '@vitest/mocker@4.1.7(vite@8.0.16)':
+  '@vitest/mocker@4.1.7(vite@8.0.16(@types/node@24.10.0))':
     dependencies:
       '@vitest/spy': 4.1.7
       estree-walker: 3.0.3
       magic-string: 0.30.21
     optionalDependencies:
-      vite: 8.0.16
+      vite: 8.0.16(@types/node@24.10.0)
 
   '@vitest/pretty-format@4.1.7':
     dependencies:
@@ -1178,13 +1191,15 @@ snapshots:
 
   typescript@6.0.3: {}
 
+  undici-types@7.16.0: {}
+
   update-browserslist-db@1.2.3(browserslist@4.28.7):
     dependencies:
       browserslist: 4.28.7
       escalade: 3.2.0
       picocolors: 1.1.1
 
-  vite@8.0.16:
+  vite@8.0.16(@types/node@24.10.0):
     dependencies:
       lightningcss: 1.33.0
       picomatch: 4.0.5
@@ -1192,12 +1207,13 @@ snapshots:
       rolldown: 1.0.3
       tinyglobby: 0.2.17
     optionalDependencies:
+      '@types/node': 24.10.0
       fsevents: 2.3.3
 
-  vitest@4.1.7(vite@8.0.16):
+  vitest@4.1.7(@types/node@24.10.0)(vite@8.0.16(@types/node@24.10.0)):
     dependencies:
       '@vitest/expect': 4.1.7
-      '@vitest/mocker': 4.1.7(vite@8.0.16)
+      '@vitest/mocker': 4.1.7(vite@8.0.16(@types/node@24.10.0))
       '@vitest/pretty-format': 4.1.7
       '@vitest/runner': 4.1.7
       '@vitest/snapshot': 4.1.7
@@ -1214,8 +1230,10 @@ snapshots:
       tinyexec: 1.2.4
       tinyglobby: 0.2.17
       tinyrainbow: 3.1.0
-      vite: 8.0.16
+      vite: 8.0.16(@types/node@24.10.0)
       why-is-node-running: 2.3.0
+    optionalDependencies:
+      '@types/node': 24.10.0
     transitivePeerDependencies:
       - msw
 
