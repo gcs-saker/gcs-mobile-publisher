@@ -24,4 +24,11 @@ describe("frontend architecture boundaries", () => {
     expect(screen).not.toContain("createWhipSession");
     expect(screen).not.toContain("sendTelemetry");
   });
+
+  it("keeps authentication infrastructure out of its UI template", () => {
+    const screen = source("../ui/templates/AuthenticationScreen.tsx");
+    expect(screen).not.toMatch(/\b(fetch|sessionStorage|useEffect|useState)\b/);
+    expect(screen).not.toContain("HttpAuthenticationGateway");
+    expect(screen).not.toContain("AuthSessionManager");
+  });
 });

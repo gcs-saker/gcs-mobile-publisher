@@ -79,10 +79,6 @@ export function PublisherScreen({ controller }: PublisherScreenProps) {
             <span>스트림 ID</span>
             <input value={controller.streamId} onChange={(event) => controller.setStreamId(event.target.value)} disabled={controller.status === "live"} />
           </label>
-          <label>
-            <span>Access Token</span>
-            <input type="password" value={controller.token} onChange={(event) => controller.setToken(event.target.value)} disabled={controller.status === "live"} placeholder="Bearer token" />
-          </label>
         </div>
         <p className={controller.status === "error" || controller.sensorError ? "message message--error" : "message"}>
           {controller.sensorError || controller.message}

@@ -10,7 +10,6 @@ const initialState: PublisherState = {
   quality: "high",
   status: "idle",
   streamId: "CID001",
-  token: "",
 };
 
 describe("publisherStore", () => {
