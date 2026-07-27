@@ -32,7 +32,6 @@ export function PublisherStoreProvider({ children, store }: PublisherStoreProvid
       quality: "high",
       status: "idle",
       streamId: config.defaultStreamId,
-      token: runtime.sessionStore.get("gcs.accessToken") || "",
     });
   }
   return (

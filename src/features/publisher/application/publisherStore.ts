@@ -10,7 +10,6 @@ export interface PublisherState {
   quality: VideoQuality;
   status: PublisherStatus;
   streamId: string;
-  token: string;
 }
 
 export interface PublisherStore {

@@ -16,11 +16,11 @@ import {
   type PublisherTransition,
 } from "../domain/publisherMachine";
 
-export function usePublisherController() {
+export function usePublisherController(accessToken: string) {
   const runtime = useRuntime();
   const store = usePublisherStoreApi();
   const state = usePublisherStore((snapshot) => snapshot);
-  const { generation, isOnline, mediaReady, message, muted, quality, status, streamId, token } = state;
+  const { generation, isOnline, mediaReady, message, muted, quality, status, streamId } = state;
   const [media, setMedia] = useState<MediaStream | null>(null);
   const [peerConnection, setPeerConnection] = useState<RTCPeerConnection | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -59,8 +59,6 @@ export function usePublisherController() {
     if (!requested.accepted) return;
     const activeGeneration = requested.state.generation;
     try {
-      if (token.trim()) runtime.sessionStore.set("gcs.accessToken", token.trim());
-      else runtime.sessionStore.remove("gcs.accessToken");
       mediaRef.current?.getTracks().forEach((track) => track.stop());
       if (!runtime.mediaDevices) throw new Error("이 기기에서는 카메라를 사용할 수 없습니다.");
       const nextMedia = await runtime.mediaDevices.getUserMedia({
@@ -95,7 +93,7 @@ export function usePublisherController() {
         message: reason instanceof Error ? reason.message : "기기 권한을 받을 수 없습니다.",
       });
     }
-  }, [dispatch, runtime, startSensors, store, token]);
+  }, [dispatch, runtime, startSensors, store]);
 
   const publish = useCallback(async () => {
     if (!mediaRef.current) return;
@@ -105,7 +103,7 @@ export function usePublisherController() {
       : dispatch({ type: "PUBLISH_REQUESTED", generation: activeGeneration });
     if (!requested.accepted) return;
     try {
-      const authorization = await authorizePublish(streamId.trim(), token.trim(), runtime.fetch);
+      const authorization = await authorizePublish(streamId.trim(), accessToken, runtime.fetch);
       const authorized = dispatch({ type: "AUTHORIZED", generation: activeGeneration });
       if (!authorized.accepted) return;
       peerConnectionRef.current?.close();
@@ -155,7 +153,7 @@ export function usePublisherController() {
         }
       }
     }
-  }, [dispatch, runtime, status, store, streamId, token]);
+  }, [accessToken, dispatch, runtime, status, store, streamId]);
 
   const stop = useCallback(() => {
     dispatch({ type: "STOPPED" });
@@ -224,7 +222,7 @@ export function usePublisherController() {
           runtime.clock,
           runtime.userAgent,
         ),
-        token,
+        accessToken,
         runtime.fetch,
       ).catch((reason: unknown) => {
         store.setState({
@@ -233,7 +231,7 @@ export function usePublisherController() {
       });
     }, 2_000);
     return () => runtime.scheduler.clearInterval(id);
-  }, [runtime, snapshot, status, store, streamId, token]);
+  }, [accessToken, runtime, snapshot, status, store, streamId]);
 
   useEffect(() => stop, [stop]);
 
@@ -254,8 +252,6 @@ export function usePublisherController() {
     stop,
     streamId,
     setStreamId: (value: string) => store.setState({ streamId: value }),
-    token,
-    setToken: (value: string) => store.setState({ token: value }),
     toggleMute,
     videoRef,
   } as const;

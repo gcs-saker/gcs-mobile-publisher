@@ -13,9 +13,15 @@ const STATUS_LABEL = {
 
 export interface PublisherScreenProps {
   controller: ReturnTypeOfPublisherController;
+  deviceId: string;
+  onLogout(): Promise<void>;
 }
 
-export function PublisherScreen({ controller }: PublisherScreenProps) {
+export function PublisherScreen({
+  controller,
+  deviceId,
+  onLogout,
+}: PublisherScreenProps) {
   const battery = controller.snapshot.battery;
   const batteryText = battery.supported && battery.level !== null
     ? `${Math.round(battery.level * 100)}%${battery.charging ? " · 충전" : ""}`
@@ -45,6 +51,15 @@ export function PublisherScreen({ controller }: PublisherScreenProps) {
             {controller.isOnline ? "온라인" : "오프라인"}
           </span>
           <div className="battery" aria-label="배터리 상태">{batteryText}</div>
+          <button
+            className="session-button"
+            disabled={controller.status === "live"}
+            onClick={() => void onLogout()}
+            title={deviceId}
+            type="button"
+          >
+            로그아웃
+          </button>
         </div>
       </header>
 
@@ -78,10 +93,6 @@ export function PublisherScreen({ controller }: PublisherScreenProps) {
           <label>
             <span>스트림 ID</span>
             <input value={controller.streamId} onChange={(event) => controller.setStreamId(event.target.value)} disabled={controller.status === "live"} />
-          </label>
-          <label>
-            <span>Access Token</span>
-            <input type="password" value={controller.token} onChange={(event) => controller.setToken(event.target.value)} disabled={controller.status === "live"} placeholder="Bearer token" />
           </label>
         </div>
         <p className={controller.status === "error" || controller.sensorError ? "message message--error" : "message"}>

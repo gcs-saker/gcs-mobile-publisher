@@ -19,6 +19,46 @@ html, body, #root {
 body { min-height: 100dvh; }
 button, input { font: inherit; }
 
+.auth-screen {
+  display: grid;
+  min-height: 100dvh;
+  place-items: center;
+  padding: calc(24px + env(safe-area-inset-top)) var(--page-inline)
+    calc(24px + env(safe-area-inset-bottom));
+  background:
+    radial-gradient(circle at 50% 12%, rgba(68, 155, 105, .24), transparent 34%),
+    #07110e;
+}
+
+.auth-card {
+  width: min(100%, 420px);
+  padding: clamp(22px, 7vw, 34px);
+  border: 1px solid rgba(255,255,255,.12);
+  border-radius: 24px;
+  background: rgba(11, 24, 19, .92);
+  box-shadow: 0 24px 80px rgba(0,0,0,.34);
+}
+
+.auth-brand { color: #6eea94; font-size: 12px; font-weight: 900; letter-spacing: .16em; }
+.auth-card h1 { margin: 14px 0 8px; font-size: clamp(24px, 8vw, 32px); }
+.auth-card > p { margin: 0 0 24px; color: #9fb1a8; font-size: 13px; line-height: 1.6; }
+.auth-form { display: grid; gap: 14px; }
+.auth-form label { display: grid; gap: 7px; }
+.auth-form label span { color: #b9c9c1; font-size: 12px; font-weight: 700; }
+.auth-form input {
+  width: 100%;
+  min-height: var(--touch-target);
+  border: 1px solid #2a3d34;
+  border-radius: 12px;
+  outline: none;
+  padding: 10px 12px;
+  color: #eef8f2;
+  background: #07110e;
+}
+.auth-form input:focus { border-color: #59e889; }
+.auth-form .button { margin-top: 4px; }
+.auth-progress { min-height: 120px; color: #bceacc; }
+
 .app {
   position: relative;
   width: 100%;
@@ -80,6 +120,15 @@ button, input { font: inherit; }
 .network { font-size: 9px; font-weight: 800; letter-spacing: .08em; }
 .network--online { color: #6eea94; }
 .network--offline { color: #ff8189; }
+.session-button {
+  border: 0;
+  padding: 2px 0;
+  color: #9fb1a8;
+  background: transparent;
+  font-size: 9px;
+  text-decoration: underline;
+}
+.session-button:disabled { cursor: not-allowed; opacity: .42; }
 
 .level {
   position: relative;
@@ -155,7 +204,7 @@ button, input { font: inherit; }
   backdrop-filter: blur(18px);
 }
 
-.fields { display: grid; grid-template-columns: 1fr 1.35fr; gap: 8px; }
+.fields { display: grid; grid-template-columns: 1fr; gap: 8px; }
 .runtime-strip {
   display: flex;
   gap: 12px;
