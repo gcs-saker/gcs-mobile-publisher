@@ -9,5 +9,11 @@ export function App() {
   if (authentication.status !== "authenticated") {
     return <AuthenticationScreen controller={authentication} />;
   }
-  return <PublisherScreen controller={publisher} />;
+  return (
+    <PublisherScreen
+      controller={publisher}
+      deviceId={authentication.deviceId ?? ""}
+      onLogout={authentication.logout}
+    />
+  );
 }
