@@ -1,6 +1,5 @@
 import type { ButtonHTMLAttributes, PropsWithChildren } from "react";
-
-export type ActionButtonTone = "default" | "live" | "stop" | "secondary";
+import type { ActionButtonTone } from "../types";
 
 export interface ActionButtonProps
   extends PropsWithChildren,

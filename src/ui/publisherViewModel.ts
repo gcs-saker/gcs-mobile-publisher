@@ -1,12 +1,12 @@
 import type { PublisherStatus } from "../types";
+import type { ActionButtonTone } from "./types";
 
 export type PublisherAction = "prepare" | "publish" | "stop";
-export type PublisherActionTone = "prepare" | "live" | "stop";
 
 export interface PublisherActionView {
   action: PublisherAction;
   label: string;
-  tone: PublisherActionTone;
+  tone: ActionButtonTone;
 }
 
 export interface PublisherStatusView {
@@ -17,7 +17,7 @@ export interface PublisherStatusView {
 const PREPARE_ACTION: PublisherActionView = {
   action: "prepare",
   label: "송출 준비",
-  tone: "prepare",
+  tone: "default",
 };
 
 const PUBLISH_ACTION: PublisherActionView = {
