@@ -3,8 +3,9 @@ import type {
   AuthSession,
   AuthSessionRepository,
   AuthenticationGateway,
-  DeviceRegistrationRequest,
   LoginRequest,
+  SignupRequest,
+  SignupResponse,
 } from "../contracts/authentication";
 
 export interface AuthSessionManagerOptions {
@@ -34,22 +35,18 @@ export class AuthSessionManager {
     return this.persist(await this.gateway.login(request));
   }
 
-  async registerDevice(request: DeviceRegistrationRequest): Promise<AuthSession> {
-    return this.persist(await this.gateway.registerDevice(request));
+  signup(request: SignupRequest): Promise<SignupResponse> {
+    return this.gateway.signup(request);
   }
 
   async restore(): Promise<AuthSession | null> {
     const session = await this.repository.load();
-    if (!session) return null;
-    if (!this.requiresRefresh(session)) return session;
-    if (!session.refreshToken) {
-      await this.repository.clear();
-      return null;
-    }
+    if (session && !this.requiresRefresh(session)) return session;
     try {
-      return await this.persist(await this.gateway.refresh(session.refreshToken));
+      return await this.persist(await this.gateway.refresh());
     } catch (reason) {
       await this.repository.clear();
+      if (isUnauthorized(reason)) return null;
       throw reason;
     }
   }
@@ -63,7 +60,7 @@ export class AuthSessionManager {
   async logout(): Promise<void> {
     const session = await this.repository.load();
     try {
-      if (session) await this.gateway.revoke(session.accessToken);
+      await this.gateway.logout(session?.accessToken ?? null);
     } finally {
       await this.repository.clear();
     }
@@ -77,4 +74,11 @@ export class AuthSessionManager {
     await this.repository.save(session);
     return session;
   }
+}
+
+function isUnauthorized(reason: unknown): boolean {
+  return typeof reason === "object"
+    && reason !== null
+    && "status" in reason
+    && reason.status === 401;
 }

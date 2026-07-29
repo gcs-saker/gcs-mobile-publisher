@@ -12,7 +12,7 @@ export function App() {
   return (
     <PublisherScreen
       controller={publisher}
-      deviceId={authentication.deviceId ?? ""}
+      principalName={authentication.username ?? ""}
       onLogout={authentication.logout}
     />
   );

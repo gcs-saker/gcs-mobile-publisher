@@ -4,7 +4,7 @@ import { StatusBadge } from "../atoms/StatusBadge";
 
 export interface PublisherHeaderProps {
   battery: SensorSnapshot["battery"];
-  deviceId: string;
+  principalName: string;
   isOnline: boolean;
   onLogout(): Promise<void>;
   status: PublisherStatus;
@@ -13,7 +13,7 @@ export interface PublisherHeaderProps {
 
 export function PublisherHeader({
   battery,
-  deviceId,
+  principalName,
   isOnline,
   onLogout,
   status,
@@ -35,7 +35,7 @@ export function PublisherHeader({
           className="session-button"
           disabled={status === "live"}
           onClick={() => void onLogout()}
-          title={deviceId}
+          title={principalName}
           type="button"
         >
           로그아웃

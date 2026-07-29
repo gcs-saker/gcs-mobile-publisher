@@ -5,13 +5,13 @@ import type { ReturnTypeOfPublisherController } from "../types";
 
 export interface PublisherScreenProps {
   controller: ReturnTypeOfPublisherController;
-  deviceId: string;
+  principalName: string;
   onLogout(): Promise<void>;
 }
 
 export function PublisherScreen({
   controller,
-  deviceId,
+  principalName,
   onLogout,
 }: PublisherScreenProps) {
   return (
@@ -24,7 +24,7 @@ export function PublisherScreen({
       <div className="shade" aria-hidden="true" />
       <PublisherHeader
         battery={controller.snapshot.battery}
-        deviceId={deviceId}
+        principalName={principalName}
         isOnline={controller.isOnline}
         onLogout={onLogout}
         status={controller.status}

@@ -1,32 +1,39 @@
-export interface AccessCredential {
+export type UserRole = "viewer" | "operator" | "admin";
+
+export interface AuthenticatedUser {
+  role: UserRole;
+  username: string;
+}
+
+export interface AuthSession extends AuthenticatedUser {
   accessToken: string;
   expiresAt: number;
 }
 
-export interface RefreshableCredential extends AccessCredential {
-  refreshToken: string;
+export interface SignupRequest {
+  email: string;
+  inviteCode: string;
+  password: string;
+  role: "viewer";
+  username: string;
 }
 
-export interface AuthSession extends AccessCredential {
-  deviceId: string;
-  refreshToken: string | null;
-}
-
-export interface DeviceRegistrationRequest {
-  deviceName: string;
-  registrationCode: string;
+export interface SignupResponse extends AuthenticatedUser {
+  companyId: number;
+  email: string;
+  id: number;
 }
 
 export interface LoginRequest {
-  deviceId: string;
-  secret: string;
+  password: string;
+  username: string;
 }
 
 export interface AuthenticationGateway {
   login(request: LoginRequest): Promise<AuthSession>;
-  refresh(refreshToken: string): Promise<AuthSession>;
-  registerDevice(request: DeviceRegistrationRequest): Promise<AuthSession>;
-  revoke(accessToken: string): Promise<void>;
+  logout(accessToken: string | null): Promise<void>;
+  refresh(): Promise<AuthSession>;
+  signup(request: SignupRequest): Promise<SignupResponse>;
 }
 
 export interface AuthSessionRepository {
