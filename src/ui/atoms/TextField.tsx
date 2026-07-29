@@ -6,10 +6,12 @@ export interface TextFieldProps {
   disabled?: boolean;
   label: string;
   maxLength?: number;
+  minLength?: number;
   name: string;
   onChange: ChangeEventHandler<HTMLInputElement>;
   placeholder?: string;
   required?: boolean;
+  type?: "email" | "password" | "text";
   value: string;
 }
 
@@ -19,10 +21,12 @@ export function TextField({
   disabled = false,
   label,
   maxLength,
+  minLength,
   name,
   onChange,
   placeholder,
   required = false,
+  type = "text",
   value,
 }: TextFieldProps) {
   return (
@@ -33,10 +37,12 @@ export function TextField({
         {...(autoComplete ? { autoComplete } : {})}
         disabled={disabled}
         {...(maxLength === undefined ? {} : { maxLength })}
+        {...(minLength === undefined ? {} : { minLength })}
         name={name}
         onChange={onChange}
         {...(placeholder ? { placeholder } : {})}
         required={required}
+        type={type}
         value={value}
       />
     </label>

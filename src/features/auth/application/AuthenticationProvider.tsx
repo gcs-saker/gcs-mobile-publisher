@@ -9,7 +9,7 @@ import {
 import { useRuntime } from "../../../app/RuntimeProvider";
 import { config } from "../../../config";
 import { HttpAuthenticationGateway } from "../infrastructure/HttpAuthenticationGateway";
-import { SessionAuthSessionRepository } from "../infrastructure/SessionAuthSessionRepository";
+import { MemoryAuthSessionRepository } from "../infrastructure/MemoryAuthSessionRepository";
 import { AuthSessionManager } from "./AuthSessionManager";
 import {
   createAuthenticationStore,
@@ -39,10 +39,13 @@ export function AuthenticationProvider({
   const value = useMemo<AuthenticationDependencies>(() => ({
     manager: dependencies?.manager ?? new AuthSessionManager(
       new HttpAuthenticationGateway(
-        { baseUrl: config.authApiBaseUrl },
+        {
+          baseUrl: config.authApiBaseUrl,
+          now: runtime.clock.now,
+        },
         runtime.fetch,
       ),
-      new SessionAuthSessionRepository(runtime.sessionStore),
+      new MemoryAuthSessionRepository(),
       runtime.clock,
       { refreshLeewayMs: 60_000 },
     ),

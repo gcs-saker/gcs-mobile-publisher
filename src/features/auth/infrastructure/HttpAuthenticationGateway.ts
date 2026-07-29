@@ -1,12 +1,15 @@
 import type {
   AuthSession,
   AuthenticationGateway,
-  DeviceRegistrationRequest,
   LoginRequest,
+  SignupRequest,
+  SignupResponse,
+  UserRole,
 } from "../contracts/authentication";
 
 export interface AuthenticationApiConfiguration {
   baseUrl: string;
+  now(): number;
 }
 
 export class AuthenticationApiError extends Error {
@@ -19,67 +22,140 @@ export class AuthenticationApiError extends Error {
   }
 }
 
+interface JsonHeaders extends Record<string, string> {
+  Accept: "application/json";
+  "Content-Type": "application/json";
+  "X-GCS-CSRF": "same-origin";
+}
+
+const JSON_HEADERS: JsonHeaders = {
+  Accept: "application/json",
+  "Content-Type": "application/json",
+  "X-GCS-CSRF": "same-origin",
+};
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
 
-function decodeSession(value: unknown): AuthSession {
+function isUserRole(value: unknown): value is UserRole {
+  return value === "viewer" || value === "operator" || value === "admin";
+}
+
+function decodeSession(value: unknown, now: number): AuthSession {
   if (!isRecord(value)) throw new TypeError("Invalid authentication response");
-  const { accessToken, deviceId, expiresAt, refreshToken } = value;
+  const {
+    access_token: accessToken,
+    expires_in_minutes: expiresInMinutes,
+    role,
+    token_type: tokenType,
+    username,
+  } = value;
   if (
     typeof accessToken !== "string"
-    || typeof deviceId !== "string"
-    || typeof expiresAt !== "number"
-    || (typeof refreshToken !== "string" && refreshToken !== null)
+    || typeof expiresInMinutes !== "number"
+    || !Number.isFinite(expiresInMinutes)
+    || expiresInMinutes <= 0
+    || !isUserRole(role)
+    || tokenType !== "bearer"
+    || typeof username !== "string"
   ) {
     throw new TypeError("Invalid authentication response");
   }
-  return { accessToken, deviceId, expiresAt, refreshToken };
+  return {
+    accessToken,
+    expiresAt: now + expiresInMinutes * 60_000,
+    role,
+    username,
+  };
+}
+
+function decodeSignup(value: unknown): SignupResponse {
+  if (!isRecord(value)) throw new TypeError("Invalid signup response");
+  const {
+    company_id: companyId,
+    email,
+    id,
+    role,
+    username,
+  } = value;
+  if (
+    typeof companyId !== "number"
+    || typeof email !== "string"
+    || typeof id !== "number"
+    || !isUserRole(role)
+    || typeof username !== "string"
+  ) {
+    throw new TypeError("Invalid signup response");
+  }
+  return { companyId, email, id, role, username };
+}
+
+async function errorDetail(response: Response): Promise<string> {
+  try {
+    const payload: unknown = await response.json();
+    if (isRecord(payload) && typeof payload["detail"] === "string") {
+      return payload["detail"];
+    }
+  } catch {
+    // The stable fallback below avoids exposing an arbitrary response body.
+  }
+  return "Authentication request failed";
 }
 
 export class HttpAuthenticationGateway implements AuthenticationGateway {
   private readonly baseUrl: string;
 
   constructor(
-    configuration: AuthenticationApiConfiguration,
+    private readonly configuration: AuthenticationApiConfiguration,
     private readonly fetcher: typeof fetch,
   ) {
     this.baseUrl = configuration.baseUrl.replace(/\/$/, "");
   }
 
-  login(request: LoginRequest): Promise<AuthSession> {
-    return this.requestSession("/api/v1/auth/devices/login", request);
+  async signup(request: SignupRequest): Promise<SignupResponse> {
+    const response = await this.post("/signup", request);
+    await this.assertOk(response);
+    return decodeSignup(await response.json());
   }
 
-  refresh(refreshToken: string): Promise<AuthSession> {
-    return this.requestSession("/api/v1/auth/refresh", { refreshToken });
+  async login(request: LoginRequest): Promise<AuthSession> {
+    return this.requestSession("/login", request);
   }
 
-  registerDevice(request: DeviceRegistrationRequest): Promise<AuthSession> {
-    return this.requestSession("/api/v1/auth/devices/register", request);
+  async refresh(): Promise<AuthSession> {
+    return this.requestSession("/refresh");
   }
 
-  async revoke(accessToken: string): Promise<void> {
-    const response = await this.post("/api/v1/auth/revoke", { accessToken });
-    if (!response.ok) throw new AuthenticationApiError("Token revocation failed", response.status);
+  async logout(accessToken: string | null): Promise<void> {
+    const headers: Record<string, string> = { ...JSON_HEADERS };
+    if (accessToken) headers["Authorization"] = `Bearer ${accessToken}`;
+    const response = await this.post("/logout", undefined, headers);
+    await this.assertOk(response);
   }
 
-  private async requestSession(path: string, body: object): Promise<AuthSession> {
+  private async requestSession(path: string, body?: object): Promise<AuthSession> {
     const response = await this.post(path, body);
-    if (!response.ok) {
-      throw new AuthenticationApiError("Authentication request failed", response.status);
-    }
+    await this.assertOk(response);
     const payload: unknown = await response.json();
-    return decodeSession(payload);
+    return decodeSession(payload, this.configuration.now());
   }
 
-  private post(path: string, body: object): Promise<Response> {
+  private async assertOk(response: Response): Promise<void> {
+    if (!response.ok) {
+      throw new AuthenticationApiError(await errorDetail(response), response.status);
+    }
+  }
+
+  private post(
+    path: string,
+    body?: object,
+    headers: Record<string, string> = JSON_HEADERS,
+  ): Promise<Response> {
     return this.fetcher(`${this.baseUrl}${path}`, {
-      body: JSON.stringify(body),
-      headers: {
-        Accept: "application/json",
-        "Content-Type": "application/json",
-      },
+      ...(body ? { body: JSON.stringify(body) } : {}),
+      credentials: "include",
+      headers,
       method: "POST",
     });
   }

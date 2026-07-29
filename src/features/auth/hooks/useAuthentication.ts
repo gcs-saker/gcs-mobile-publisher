@@ -1,5 +1,8 @@
 import { useCallback, useEffect } from "react";
-import type { DeviceRegistrationRequest } from "../contracts/authentication";
+import type {
+  LoginRequest,
+  SignupRequest,
+} from "../contracts/authentication";
 import {
   useAuthenticationDependencies,
   useAuthenticationStore,
@@ -38,17 +41,39 @@ export function useAuthentication() {
     };
   }, [manager, store]);
 
-  const registerDevice = useCallback(async (request: DeviceRegistrationRequest) => {
+  const login = useCallback(async (request: LoginRequest): Promise<boolean> => {
     store.setState({ message: "", status: "submitting" });
     try {
-      const session = await manager.registerDevice(request);
+      const session = await manager.login(request);
       store.setState({ session, status: "authenticated" });
+      return true;
     } catch (reason) {
       store.setState({
         message: messageFrom(reason),
         session: null,
         status: "error",
       });
+      return false;
+    }
+  }, [manager, store]);
+
+  const signup = useCallback(async (request: SignupRequest): Promise<boolean> => {
+    store.setState({ message: "", status: "submitting" });
+    try {
+      await manager.signup(request);
+      store.setState({
+        message: "회원가입이 완료되었습니다. 로그인해 주세요.",
+        session: null,
+        status: "signedOut",
+      });
+      return true;
+    } catch (reason) {
+      store.setState({
+        message: messageFrom(reason),
+        session: null,
+        status: "error",
+      });
+      return false;
     }
   }, [manager, store]);
 
@@ -56,17 +81,18 @@ export function useAuthentication() {
     try {
       await manager.logout();
     } catch {
-      // Local credentials are cleared by the manager even when remote revocation fails.
+      // Memory credentials are cleared by the manager even when logout fails remotely.
     }
     store.setState({ message: "", session: null, status: "signedOut" });
   }, [manager, store]);
 
   return {
     accessToken: state.session?.accessToken ?? null,
-    deviceId: state.session?.deviceId ?? null,
+    login,
     logout,
     message: state.message,
-    registerDevice,
+    signup,
     status: state.status,
+    username: state.session?.username ?? null,
   } as const;
 }

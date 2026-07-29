@@ -42,6 +42,27 @@ button, input { font: inherit; }
 .auth-brand { color: #6eea94; font-size: 12px; font-weight: 900; letter-spacing: .16em; }
 .auth-card h1 { margin: 14px 0 8px; font-size: clamp(24px, 8vw, 32px); }
 .auth-card > p { margin: 0 0 24px; color: #9fb1a8; font-size: 13px; line-height: 1.6; }
+.auth-mode {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 4px;
+  margin-bottom: 16px;
+  padding: 4px;
+  border-radius: 12px;
+  background: #07110e;
+}
+.auth-mode button {
+  min-height: 40px;
+  border: 0;
+  border-radius: 9px;
+  color: #9fb1a8;
+  background: transparent;
+  font-weight: 800;
+}
+.auth-mode button[aria-selected="true"] {
+  color: #07110e;
+  background: #6eea94;
+}
 .auth-form { display: grid; gap: 14px; }
 .auth-form label { display: grid; gap: 7px; }
 .auth-form label span { color: #b9c9c1; font-size: 12px; font-weight: 700; }

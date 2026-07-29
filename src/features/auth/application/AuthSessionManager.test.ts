@@ -15,9 +15,9 @@ const NOW = 1_000;
 function session(overrides: Partial<AuthSession> = {}): AuthSession {
   return {
     accessToken: "access-token",
-    deviceId: "device-1",
     expiresAt: NOW + 60_000,
-    refreshToken: "refresh-token",
+    role: "viewer",
+    username: "test1",
     ...overrides,
   };
 }
@@ -26,9 +26,15 @@ function dependencies(initial: AuthSession | null = null) {
   let stored = initial;
   const gateway: AuthenticationGateway = {
     login: vi.fn(async () => session()),
+    logout: vi.fn(async () => undefined),
     refresh: vi.fn(async () => session({ accessToken: "refreshed-token" })),
-    registerDevice: vi.fn(async () => session()),
-    revoke: vi.fn(async () => undefined),
+    signup: vi.fn(async () => ({
+      companyId: 1,
+      email: "test1@example.com",
+      id: 7,
+      role: "viewer" as const,
+      username: "test1",
+    })),
   };
   const repository: AuthSessionRepository = {
     clear: vi.fn(async () => {
@@ -57,59 +63,79 @@ function manager(initial: AuthSession | null = null) {
 }
 
 describe("AuthSessionManager", () => {
-  it("persists a device registration session", async () => {
+  it("signs up without treating the response as an authenticated session", async () => {
     const { gateway, repository, subject } = manager();
-    const request = { deviceName: "Pixel", registrationCode: "ABC-123" };
+    const request = {
+      email: "test1@example.com",
+      inviteCode: "invite",
+      password: "strong-password",
+      role: "viewer" as const,
+      username: "test1",
+    };
 
-    await expect(subject.registerDevice(request)).resolves.toEqual(session());
-    expect(gateway.registerDevice).toHaveBeenCalledWith(request);
+    await subject.signup(request);
+
+    expect(gateway.signup).toHaveBeenCalledWith(request);
+    expect(repository.save).not.toHaveBeenCalled();
+  });
+
+  it("persists a successful login session", async () => {
+    const { repository, subject } = manager();
+
+    await expect(subject.login({
+      password: "strong-password",
+      username: "test1",
+    })).resolves.toEqual(session());
     expect(repository.save).toHaveBeenCalledWith(session());
   });
 
-  it("returns an active persisted access token without refreshing", async () => {
+  it("returns an active in-memory access token without refreshing", async () => {
     const { gateway, subject } = manager(session());
 
     await expect(subject.accessToken()).resolves.toBe("access-token");
     expect(gateway.refresh).not.toHaveBeenCalled();
   });
 
-  it("refreshes and persists a session before its access token expires", async () => {
-    const expiring = session({ expiresAt: NOW + 5_000 });
-    const { gateway, repository, subject } = manager(expiring);
+  it("restores a browser session through the HttpOnly refresh cookie", async () => {
+    const { gateway, repository, subject } = manager();
 
-    await expect(subject.accessToken()).resolves.toBe("refreshed-token");
-    expect(gateway.refresh).toHaveBeenCalledWith("refresh-token");
-    expect(repository.save).toHaveBeenCalledWith(
-      expect.objectContaining({ accessToken: "refreshed-token" }),
-    );
+    await expect(subject.restore()).resolves.toMatchObject({
+      accessToken: "refreshed-token",
+    });
+    expect(gateway.refresh).toHaveBeenCalledOnce();
+    expect(repository.save).toHaveBeenCalledOnce();
   });
 
-  it("clears an expired non-refreshable session", async () => {
-    const { repository, subject } = manager(
-      session({ expiresAt: NOW - 1, refreshToken: null }),
-    );
+  it("treats a rejected refresh cookie as signed out", async () => {
+    const { gateway, repository, subject } = manager();
+    vi.mocked(gateway.refresh).mockRejectedValueOnce({ status: 401 });
 
-    await expect(subject.accessToken()).rejects.toBeInstanceOf(AuthenticationRequiredError);
+    await expect(subject.restore()).resolves.toBeNull();
     expect(repository.clear).toHaveBeenCalledOnce();
   });
 
-  it("clears credentials when refresh is rejected", async () => {
-    const { gateway, repository, subject } = manager(
-      session({ expiresAt: NOW - 1 }),
-    );
-    vi.mocked(gateway.refresh).mockRejectedValueOnce(new Error("revoked"));
+  it("surfaces a refresh network failure", async () => {
+    const { gateway, repository, subject } = manager();
+    vi.mocked(gateway.refresh).mockRejectedValueOnce(new Error("offline"));
 
-    await expect(subject.restore()).rejects.toThrow("revoked");
+    await expect(subject.restore()).rejects.toThrow("offline");
     expect(repository.clear).toHaveBeenCalledOnce();
   });
 
-  it("revokes remotely and always removes local credentials on logout", async () => {
+  it("logs out remotely and always removes memory credentials", async () => {
     const { gateway, repository, subject } = manager(session());
-    vi.mocked(gateway.revoke).mockRejectedValueOnce(new Error("offline"));
+    vi.mocked(gateway.logout).mockRejectedValueOnce(new Error("offline"));
 
     await expect(subject.logout()).rejects.toThrow("offline");
-    expect(gateway.revoke).toHaveBeenCalledWith("access-token");
+    expect(gateway.logout).toHaveBeenCalledWith("access-token");
     expect(repository.clear).toHaveBeenCalledOnce();
+  });
+
+  it("requires authentication when cookie restoration is rejected", async () => {
+    const { gateway, subject } = manager();
+    vi.mocked(gateway.refresh).mockRejectedValueOnce({ status: 401 });
+
+    await expect(subject.accessToken()).rejects.toBeInstanceOf(AuthenticationRequiredError);
   });
 
   it("rejects a negative refresh leeway", () => {
