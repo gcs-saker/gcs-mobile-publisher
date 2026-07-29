@@ -15,6 +15,10 @@ export interface NetworkMonitor {
   subscribe(onOnline: () => void, onOffline: () => void): () => void;
 }
 
+export interface RandomSource {
+  next(): number;
+}
+
 export interface SessionStore {
   get(key: string): string | null;
   set(key: string, value: string): void;
@@ -46,6 +50,7 @@ export interface RuntimeDependencies {
   network: NetworkMonitor;
   orientation: OrientationMonitor;
   peerConnections: PeerConnectionFactory;
+  random: RandomSource;
   scheduler: Scheduler;
   sessionStore: SessionStore;
   userAgent: string;

@@ -34,6 +34,9 @@ export function createBrowserRuntime(): RuntimeDependencies {
     peerConnections: {
       create: (configuration) => new RTCPeerConnection(configuration),
     },
+    random: {
+      next: () => Math.random(),
+    },
     scheduler: {
       setInterval: (callback, delayMs) => window.setInterval(callback, delayMs),
       clearInterval: (id) => window.clearInterval(id),
