@@ -12,6 +12,7 @@ function fakeRuntime(): RuntimeDependencies {
     network: { online: true, subscribe: () => () => undefined },
     orientation: { subscribe: () => () => undefined },
     peerConnections: { create: vi.fn() },
+    random: { next: () => 0.5 },
     scheduler: {
       setInterval: vi.fn(() => 1),
       clearInterval: vi.fn(),
