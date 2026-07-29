@@ -10,6 +10,8 @@ import {
   usePublisherStore,
   usePublisherStoreApi,
 } from "../application/PublisherStoreProvider";
+import { ReconnectScheduler } from "../application/ReconnectScheduler";
+import { ReconnectPolicy } from "../domain/reconnectPolicy";
 import {
   transitionPublisher,
   type PublisherEvent,
@@ -20,17 +22,30 @@ export function usePublisherController(accessToken: string) {
   const runtime = useRuntime();
   const store = usePublisherStoreApi();
   const state = usePublisherStore((snapshot) => snapshot);
-  const { generation, isOnline, mediaReady, message, muted, quality, status, streamId } = state;
+  const { isOnline, mediaReady, message, muted, quality, status, streamId } = state;
   const [media, setMedia] = useState<MediaStream | null>(null);
   const [peerConnection, setPeerConnection] = useState<RTCPeerConnection | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const mediaRef = useRef<MediaStream | null>(null);
   const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
   const wakeLockRef = useRef<WakeLockSentinel | null>(null);
-  const reconnectTimerRef = useRef<number | null>(null);
-  const reconnectAttemptRef = useRef(0);
+  const publishingRef = useRef(false);
   const publishRef = useRef<() => Promise<void>>(async () => undefined);
   const startedAtRef = useRef(0);
+  const reconnectSchedulerRef = useRef<ReconnectScheduler | null>(null);
+  reconnectSchedulerRef.current ??= new ReconnectScheduler(
+    runtime.scheduler,
+    new ReconnectPolicy(
+      {
+        baseDelayMs: 1_000,
+        jitterRatio: 0.2,
+        maxAttempts: 5,
+        maxDelayMs: 10_000,
+      },
+      runtime.random,
+    ),
+  );
+  const reconnectScheduler = reconnectSchedulerRef.current;
   const {
     snapshot,
     error: sensorError,
@@ -53,6 +68,25 @@ export function usePublisherController(accessToken: string) {
     }
     return result;
   }, [store]);
+
+  const scheduleReconnect = useCallback((activeGeneration: number) => {
+    if (!runtime.network.online || !mediaRef.current) return;
+    const result = reconnectScheduler.schedule(() => {
+      if (runtime.network.online && mediaRef.current) void publishRef.current();
+    });
+    if (result.outcome === "scheduled") {
+      store.setState({
+        message: `네트워크 연결을 복구합니다. ${result.schedule.attempt}/5`,
+      });
+      return;
+    }
+    if (result.outcome === "exhausted") {
+      const failure = dispatch({ type: "FAILED", generation: activeGeneration });
+      if (failure.accepted) {
+        store.setState({ message: "자동 재연결 횟수를 초과했습니다. 다시 준비해 주세요." });
+      }
+    }
+  }, [dispatch, reconnectScheduler, runtime.network, store]);
 
   const prepare = useCallback(async () => {
     const requested = dispatch({ type: "PREPARE_REQUESTED" });
@@ -96,12 +130,17 @@ export function usePublisherController(accessToken: string) {
   }, [dispatch, runtime, startSensors, store]);
 
   const publish = useCallback(async () => {
-    if (!mediaRef.current) return;
+    if (!mediaRef.current || publishingRef.current) return;
+    publishingRef.current = true;
     const activeGeneration = store.getSnapshot().generation;
-    const requested = status === "reconnecting"
+    const wasReconnecting = store.getSnapshot().status === "reconnecting";
+    const requested = wasReconnecting
       ? dispatch({ type: "RETRY_REQUESTED", generation: activeGeneration })
       : dispatch({ type: "PUBLISH_REQUESTED", generation: activeGeneration });
-    if (!requested.accepted) return;
+    if (!requested.accepted) {
+      publishingRef.current = false;
+      return;
+    }
     try {
       const authorization = await authorizePublish(streamId.trim(), accessToken, runtime.fetch);
       const authorized = dispatch({ type: "AUTHORIZED", generation: activeGeneration });
@@ -115,14 +154,7 @@ export function usePublisherController(accessToken: string) {
           if (state !== "disconnected" && state !== "failed") return;
           const lost = dispatch({ type: "CONNECTION_LOST", generation: activeGeneration });
           if (!lost.accepted) return;
-          store.setState({ message: "네트워크 연결을 복구하고 있습니다." });
-          if (reconnectTimerRef.current !== null) return;
-          const delay = Math.min(15_000, 1_000 * 2 ** reconnectAttemptRef.current);
-          reconnectAttemptRef.current += 1;
-          reconnectTimerRef.current = runtime.scheduler.setTimeout(() => {
-            reconnectTimerRef.current = null;
-            if (runtime.network.online && mediaRef.current) void publishRef.current();
-          }, delay);
+          scheduleReconnect(activeGeneration);
         },
         runtime.fetch,
         runtime.peerConnections,
@@ -136,13 +168,14 @@ export function usePublisherController(accessToken: string) {
       peerConnectionRef.current = connection;
       setPeerConnection(connection);
       startedAtRef.current = runtime.clock.now();
-      reconnectAttemptRef.current = 0;
+      reconnectScheduler.reset();
       store.setState({ message: "영상과 현장 센서를 송출하고 있습니다." });
     } catch (reason) {
-      if (mediaRef.current && !runtime.network.online) {
+      if (mediaRef.current && (wasReconnecting || !runtime.network.online)) {
         const lost = dispatch({ type: "CONNECTION_LOST", generation: activeGeneration });
         if (lost.accepted) {
           store.setState({ message: "네트워크 연결을 기다리고 있습니다." });
+          scheduleReconnect(activeGeneration);
         }
       } else {
         const failure = dispatch({ type: "FAILED", generation: activeGeneration });
@@ -152,16 +185,15 @@ export function usePublisherController(accessToken: string) {
           });
         }
       }
+    } finally {
+      publishingRef.current = false;
     }
-  }, [accessToken, dispatch, runtime, status, store, streamId]);
+  }, [accessToken, dispatch, reconnectScheduler, runtime, scheduleReconnect, store, streamId]);
 
   const stop = useCallback(() => {
     dispatch({ type: "STOPPED" });
-    if (reconnectTimerRef.current !== null) {
-      runtime.scheduler.clearTimeout(reconnectTimerRef.current);
-    }
-    reconnectTimerRef.current = null;
-    reconnectAttemptRef.current = 0;
+    reconnectScheduler.reset();
+    publishingRef.current = false;
     peerConnectionRef.current?.close();
     peerConnectionRef.current = null;
     setPeerConnection(null);
@@ -174,7 +206,7 @@ export function usePublisherController(accessToken: string) {
     void wakeLockRef.current?.release();
     wakeLockRef.current = null;
     store.setState({ message: "송출을 종료했습니다." });
-  }, [dispatch, runtime.scheduler, stopSensors, store]);
+  }, [dispatch, reconnectScheduler, stopSensors, store]);
 
   const toggleMute = useCallback(() => {
     const nextMuted = !store.getSnapshot().muted;
@@ -195,21 +227,24 @@ export function usePublisherController(accessToken: string) {
   useEffect(() => runtime.network.subscribe(
     () => {
       store.setState({ isOnline: true });
-      if (mediaRef.current && (status === "reconnecting" || status === "error")) {
+      const current = store.getSnapshot();
+      if (mediaRef.current && current.status === "reconnecting") {
         store.setState({ message: "네트워크가 복구되어 송출을 다시 연결합니다." });
-        void publishRef.current();
+        scheduleReconnect(current.generation);
       }
     },
     () => {
       store.setState({ isOnline: false });
+      reconnectScheduler.cancel();
       if (mediaRef.current) {
-        const lost = dispatch({ type: "CONNECTION_LOST", generation });
+        const current = store.getSnapshot();
+        const lost = dispatch({ type: "CONNECTION_LOST", generation: current.generation });
         if (lost.accepted) {
           store.setState({ message: "네트워크가 끊겼습니다. 연결 복구를 기다립니다." });
         }
       }
     },
-  ), [dispatch, generation, runtime.network, status, store]);
+  ), [dispatch, reconnectScheduler, runtime.network, scheduleReconnect, store]);
 
   useEffect(() => {
     if (status !== "live") return;
