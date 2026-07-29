@@ -7,6 +7,7 @@ export default defineConfig(({ mode }) => {
   const target = env["VITE_DEV_PROXY_TARGET"] || "https://localhost";
 
   return {
+    base: "/publisher/",
     plugins: [react()],
     server: {
       host: "0.0.0.0",
