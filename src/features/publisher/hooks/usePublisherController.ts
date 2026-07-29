@@ -17,6 +17,7 @@ import {
   type PublisherEvent,
   type PublisherTransition,
 } from "../domain/publisherMachine";
+import { validatePublishStreamId } from "../domain/streamId";
 
 export function usePublisherController(accessToken: string) {
   const runtime = useRuntime();
@@ -131,6 +132,11 @@ export function usePublisherController(accessToken: string) {
 
   const publish = useCallback(async () => {
     if (!mediaRef.current || publishingRef.current) return;
+    const streamIdValidation = validatePublishStreamId(streamId);
+    if (!streamIdValidation.valid) {
+      store.setState({ message: streamIdValidation.message });
+      return;
+    }
     publishingRef.current = true;
     const activeGeneration = store.getSnapshot().generation;
     const wasReconnecting = store.getSnapshot().status === "reconnecting";
