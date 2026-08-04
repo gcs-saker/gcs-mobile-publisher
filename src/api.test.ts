@@ -1,10 +1,14 @@
 import { describe, expect, it, vi } from "vitest";
-import { createPublishSession, endPublishSession, renewPublishSession } from "./api";
+import { createPublishSession, endPublishSession, renewPublishSession, sendTelemetry } from "./api";
+import { emptySnapshot } from "./sensors";
 
-const identity = { credential: "device-secret", deviceUuid: "device-001" };
+const identity = {
+  accessToken: "login-access-token", expiresAt: "2099-01-01T00:00:00Z",
+  role: "operator" as const, username: "operator-a",
+};
 
-describe("device publish session API", () => {
-  it("sends identity and sensor only, then accepts the server-owned stream", async () => {
+describe("account publish session API", () => {
+  it("sends login authorization and sensor only, then accepts the server-owned stream", async () => {
     const fetcher = vi.fn<typeof fetch>(async () => Response.json({
       authorizationScheme: "Bearer",
       iceServers: [{ urls: "stun:stun.example:3478" }],
@@ -22,12 +26,11 @@ describe("device publish session API", () => {
       sessionId: "ps_001", streamId: "raw.device-001.front",
     });
     const request = fetcher.mock.calls[0];
-    expect(request?.[0]).toBe("/media-control/api/v1/device/publish-sessions");
+    expect(request?.[0]).toBe("/media-control/api/v1/account/publish-sessions");
     expect(request?.[1]).toEqual(expect.objectContaining({
       body: JSON.stringify({ sensorId: "front" }),
       headers: expect.objectContaining({
-        "X-GCS-Device-Credential": "device-secret",
-        "X-GCS-Device-UUID": "device-001",
+        Authorization: "Bearer login-access-token",
       }),
       method: "POST",
     }));
@@ -43,7 +46,7 @@ describe("device publish session API", () => {
       sessionId: "ps_001", streamId: "raw.device-001.front",
     }, fetcher);
     expect(fetcher).toHaveBeenCalledWith(
-      "/media-control/api/v1/device/publish-sessions/ps_001",
+      "/media-control/api/v1/account/publish-sessions/ps_001",
       expect.objectContaining({ headers: { Authorization: "Bearer renew-token" }, method: "DELETE" }),
     );
   });
@@ -62,8 +65,19 @@ describe("device publish session API", () => {
       publishToken: "short-2", renewalToken: "renew-2", streamId: "raw.device-001.front",
     });
     expect(fetcher).toHaveBeenCalledWith(
-      "/media-control/api/v1/device/publish-sessions/ps_001/renew",
+      "/media-control/api/v1/account/publish-sessions/ps_001/renew",
       expect.objectContaining({ headers: { Authorization: "Bearer renew-1" }, method: "POST" }),
     );
+  });
+
+  it("sends flattened mobile telemetry with the account bearer token", async () => {
+    const fetcher = vi.fn<typeof fetch>(async () => Response.json({}));
+    await sendTelemetry({ ...emptySnapshot, epochTime: 3, userAgent: "iPhone", uuid: "raw.account-a.front" }, identity, fetcher);
+    expect(fetcher).toHaveBeenCalledWith("/auth-policy/telemetry/", expect.objectContaining({
+      headers: expect.objectContaining({ Authorization: "Bearer login-access-token" }), method: "POST",
+    }));
+    const body = JSON.parse(String(fetcher.mock.calls[0]?.[1]?.body)) as Record<string, unknown>;
+    expect(body).toMatchObject({ epochTime: 3, uuid: "raw.account-a.front" });
+    expect(body).not.toHaveProperty("location");
   });
 });
