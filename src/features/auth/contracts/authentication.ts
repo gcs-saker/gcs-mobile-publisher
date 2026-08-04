@@ -1,29 +1,25 @@
-export type DeviceLifecycleStatus = "pending" | "active" | "disabled";
+export type AccountRole = "viewer" | "operator" | "admin";
 
-export interface DeviceCredential {
-  credential: string;
-  deviceUuid: string;
+export interface LoginCredentials {
+  username: string;
+  password: string;
 }
 
-export interface AuthenticatedDevice extends DeviceCredential {}
-
-export interface DeviceRegistrationRequest {
-  deviceName: string;
-  provisioningToken: string;
-}
-
-export interface DeviceRegistration extends DeviceCredential {
-  deviceName: string;
-  status: DeviceLifecycleStatus;
+export interface AuthenticatedAccount {
+  accessToken: string;
+  expiresAt: string;
+  role: AccountRole;
+  username: string;
 }
 
 export interface AuthenticationGateway {
-  authenticate(credential: DeviceCredential): Promise<AuthenticatedDevice>;
-  register(request: DeviceRegistrationRequest): Promise<DeviceRegistration>;
+  login(credentials: LoginCredentials): Promise<AuthenticatedAccount>;
+  logout(session: AuthenticatedAccount | null): Promise<void>;
+  refresh(): Promise<AuthenticatedAccount>;
 }
 
 export interface AuthSessionRepository {
   clear(): Promise<void>;
-  load(): Promise<AuthenticatedDevice | null>;
-  save(session: AuthenticatedDevice): Promise<void>;
+  load(): Promise<AuthenticatedAccount | null>;
+  save(session: AuthenticatedAccount): Promise<void>;
 }

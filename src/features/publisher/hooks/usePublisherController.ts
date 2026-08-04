@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRuntime } from "../../../app/RuntimeProvider";
-import type { AuthenticatedDevice } from "../../auth/contracts/authentication";
+import type { AuthenticatedAccount } from "../../auth/contracts/authentication";
 import { buildTelemetryPayload } from "../../../sensors";
 import { useAdaptiveQuality } from "../../../useAdaptiveQuality";
 import { useDeviceSensors } from "../../../useDeviceSensors";
@@ -20,7 +20,7 @@ import {
 } from "../domain/publisherMachine";
 import type { PublishSession } from "../../../types";
 
-export function usePublisherController(identity: AuthenticatedDevice | null) {
+export function usePublisherController(identity: AuthenticatedAccount | null) {
   const runtime = useRuntime();
   const gateway = usePublisherGateway();
   const store = usePublisherStoreApi();
@@ -279,7 +279,7 @@ export function usePublisherController(identity: AuthenticatedDevice | null) {
     const id = runtime.scheduler.setInterval(() => {
       void gateway.sendTelemetry(
         buildTelemetryPayload(
-          identity?.deviceUuid ?? "",
+          store.getSnapshot().streamId,
           startedAtRef.current,
           snapshot,
           runtime.clock,
