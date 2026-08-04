@@ -29,7 +29,6 @@ describe("MemorySettingsRepository", () => {
     const settings = {
       preferredQuality: "high" as const,
       schemaVersion: 1,
-      streamId: "CID001",
       updatedAt: 100,
     };
     await repository.put("publisher", settings);

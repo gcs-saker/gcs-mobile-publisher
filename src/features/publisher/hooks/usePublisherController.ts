@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { authorizePublish, sendTelemetry } from "../../../api";
 import { useRuntime } from "../../../app/RuntimeProvider";
+import type { AuthenticatedDevice } from "../../auth/contracts/authentication";
 import { buildTelemetryPayload } from "../../../sensors";
 import { useAdaptiveQuality } from "../../../useAdaptiveQuality";
 import { useDeviceSensors } from "../../../useDeviceSensors";
@@ -9,6 +9,7 @@ import { createWhipSession } from "../../../whip";
 import {
   usePublisherStore,
   usePublisherStoreApi,
+  usePublisherGateway,
 } from "../application/PublisherStoreProvider";
 import { ReconnectScheduler } from "../application/ReconnectScheduler";
 import { ReconnectPolicy } from "../domain/reconnectPolicy";
@@ -17,10 +18,11 @@ import {
   type PublisherEvent,
   type PublisherTransition,
 } from "../domain/publisherMachine";
-import { validatePublishStreamId } from "../domain/streamId";
+import type { PublishSession } from "../../../types";
 
-export function usePublisherController(accessToken: string) {
+export function usePublisherController(identity: AuthenticatedDevice | null) {
   const runtime = useRuntime();
+  const gateway = usePublisherGateway();
   const store = usePublisherStoreApi();
   const state = usePublisherStore((snapshot) => snapshot);
   const { isOnline, mediaReady, message, muted, quality, status, streamId } = state;
@@ -29,6 +31,8 @@ export function usePublisherController(accessToken: string) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const mediaRef = useRef<MediaStream | null>(null);
   const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
+  const publishSessionRef = useRef<PublishSession | null>(null);
+  const renewalTimerRef = useRef<number | null>(null);
   const wakeLockRef = useRef<WakeLockSentinel | null>(null);
   const publishingRef = useRef(false);
   const publishRef = useRef<() => Promise<void>>(async () => undefined);
@@ -131,12 +135,7 @@ export function usePublisherController(accessToken: string) {
   }, [dispatch, runtime, startSensors, store]);
 
   const publish = useCallback(async () => {
-    if (!mediaRef.current || publishingRef.current) return;
-    const streamIdValidation = validatePublishStreamId(streamId);
-    if (!streamIdValidation.valid) {
-      store.setState({ message: streamIdValidation.message });
-      return;
-    }
+    if (!mediaRef.current || publishingRef.current || !identity) return;
     publishingRef.current = true;
     const activeGeneration = store.getSnapshot().generation;
     const wasReconnecting = store.getSnapshot().status === "reconnecting";
@@ -148,14 +147,22 @@ export function usePublisherController(accessToken: string) {
       return;
     }
     try {
-      const authorization = await authorizePublish(streamId.trim(), accessToken, runtime.fetch);
+      const previousSession = publishSessionRef.current;
+      if (previousSession) {
+        publishSessionRef.current = null;
+        await gateway.end(previousSession).catch(() => undefined);
+      }
+      const authorization = await gateway.create(identity);
+      publishSessionRef.current = authorization;
+      store.setState({ streamId: authorization.streamId });
       const authorized = dispatch({ type: "AUTHORIZED", generation: activeGeneration });
       if (!authorized.accepted) return;
       peerConnectionRef.current?.close();
       const connection = await createWhipSession(
         mediaRef.current,
-        authorization.whipUrl,
+        authorization.publishUrl,
         authorization.iceServers,
+        authorization.publishToken,
         (state) => {
           if (state !== "disconnected" && state !== "failed") return;
           const lost = dispatch({ type: "CONNECTION_LOST", generation: activeGeneration });
@@ -194,7 +201,7 @@ export function usePublisherController(accessToken: string) {
     } finally {
       publishingRef.current = false;
     }
-  }, [accessToken, dispatch, reconnectScheduler, runtime, scheduleReconnect, store, streamId]);
+  }, [dispatch, gateway, identity, reconnectScheduler, runtime, scheduleReconnect, store]);
 
   const stop = useCallback(() => {
     dispatch({ type: "STOPPED" });
@@ -211,8 +218,13 @@ export function usePublisherController(accessToken: string) {
     stopSensors();
     void wakeLockRef.current?.release();
     wakeLockRef.current = null;
+    const activeSession = publishSessionRef.current;
+    publishSessionRef.current = null;
+    if (renewalTimerRef.current !== null) runtime.scheduler.clearInterval(renewalTimerRef.current);
+    renewalTimerRef.current = null;
+    if (activeSession) void gateway.end(activeSession).catch(() => undefined);
     store.setState({ message: "송출을 종료했습니다." });
-  }, [dispatch, reconnectScheduler, stopSensors, store]);
+  }, [dispatch, gateway, reconnectScheduler, runtime.scheduler, stopSensors, store]);
 
   const toggleMute = useCallback(() => {
     const nextMuted = !store.getSnapshot().muted;
@@ -253,26 +265,39 @@ export function usePublisherController(accessToken: string) {
   ), [dispatch, reconnectScheduler, runtime.network, scheduleReconnect, store]);
 
   useEffect(() => {
-    if (status !== "live") return;
+    if (status !== "live" || !identity) return;
+    renewalTimerRef.current = runtime.scheduler.setInterval(() => {
+      const session = publishSessionRef.current;
+      if (!session) return;
+      void gateway.renew(session).then(
+        (renewed) => { publishSessionRef.current = renewed; },
+        (reason: unknown) => {
+          store.setState({ message: reason instanceof Error ? reason.message : "송출 세션 갱신 오류" });
+        },
+      );
+    }, 120_000);
     const id = runtime.scheduler.setInterval(() => {
-      void sendTelemetry(
+      void gateway.sendTelemetry(
         buildTelemetryPayload(
-          streamId,
+          identity?.deviceUuid ?? "",
           startedAtRef.current,
           snapshot,
           runtime.clock,
           runtime.userAgent,
         ),
-        accessToken,
-        runtime.fetch,
+        identity,
       ).catch((reason: unknown) => {
         store.setState({
           message: reason instanceof Error ? reason.message : "센서 전송 오류",
         });
       });
     }, 2_000);
-    return () => runtime.scheduler.clearInterval(id);
-  }, [accessToken, runtime, snapshot, status, store, streamId]);
+    return () => {
+      runtime.scheduler.clearInterval(id);
+      if (renewalTimerRef.current !== null) runtime.scheduler.clearInterval(renewalTimerRef.current);
+      renewalTimerRef.current = null;
+    };
+  }, [gateway, identity, runtime, snapshot, status, store]);
 
   useEffect(() => stop, [stop]);
 
@@ -292,7 +317,6 @@ export function usePublisherController(accessToken: string) {
     status,
     stop,
     streamId,
-    setStreamId: (value: string) => store.setState({ streamId: value }),
     toggleMute,
     videoRef,
   } as const;

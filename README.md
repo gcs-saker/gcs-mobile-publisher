@@ -1,83 +1,81 @@
 # GCS Mobile Publisher
 
-Android Chrome을 대상으로 한 GCS 현장 송출 전용 모바일 웹/PWA입니다.
+Android Chrome을 대상으로 하는 GCS 현장 송출용 모바일 PWA입니다.
 
-## 포함 기능
+## 보안 모델
+
+모바일은 송출 대상 그룹, 스트림 ID 또는 서버 내부 경로를 선택하지 않습니다.
+
+1. 관리자가 그룹에 귀속된 일회용 기기 등록 코드를 발급합니다.
+2. 모바일은 등록 코드와 기기 이름으로 UUID 및 Credential을 발급받습니다.
+3. 이후 모바일은 UUID와 Credential로만 기기 신원을 증명합니다.
+4. 서버는 등록 원장에서 그룹, 센서 및 스트림 경로를 결정합니다.
+5. 모바일은 서버가 발급한 짧은 수명의 송출 세션으로 WHIP 연결을 생성합니다.
+
+Credential은 브라우저 영구 저장소에 저장하지 않고 현재 실행의 메모리에만 유지합니다. 페이지를 새로 열면 UUID와 Credential을 다시 입력해야 합니다.
+
+## 주요 기능
 
 - 후면 카메라 우선 720p WebRTC/WHIP 송출
-- 마이크 캡처 및 송출 중 음소거
-- GPS 위치, 고도, 정확도, 속도, 진행 방향
-- 기기 기울기(`alpha`, `beta`, `gamma`)
-- 배터리 잔량 및 충전 상태
-- Screen Wake Lock으로 송출 중 화면 꺼짐 완화
-- 기존 `media-control` publish authorization 계약 연동
-- LTE/Wi-Fi 단절 및 복구 감지, 지수 백오프 자동 재연결
-- WebRTC 통계 기반 `720p → 540p → 360p` 적응형 업로드 품질
-- Android 홈 화면 설치와 앱 셸 캐시
-
-## 요구 사항
-
-- Android의 최신 Chrome 또는 Chromium 기반 브라우저
-- 카메라, 마이크, GPS, 센서 접근이 가능한 HTTPS 주소
-- GCS `media-control`, WHIP/MediaMTX, telemetry API
-- 외부 이동통신망에서 쓸 경우 정상 구성된 STUN/TURN
-
-브라우저가 백그라운드로 이동하거나 Android가 프로세스를 종료하는 경우 송출 지속은
-보장되지 않습니다. 화면을 켜고 PWA를 전면에서 사용하는 운영 방식을 권장합니다.
-
-## 화면 기준
-
-- 주 설계 기준: Android 세로 `390 x 844 CSS px`
-- 지원 범위: `360 x 640`부터 `480 x 960 CSS px`
-- 최소 허용 폭: `320 CSS px`
-- 터치 영역: 최소 `48 x 48 CSS px`
-- 상단 상태 표시줄과 하단 제스처 영역: CSS `safe-area-inset-*` 반영
-- 짧은 화면(`height <= 720px`): 센서 패널과 수평계 자동 축소
-- 가로 화면: 조작 오류 방지를 위해 세로 회전 안내 표시
-
-실제 물리 픽셀 수가 아니라 브라우저가 제공하는 CSS 픽셀을 기준으로 배치합니다. 따라서
-고밀도 디스플레이에서도 같은 조작 크기를 유지합니다.
+- 서버 소유 기기·그룹·스트림 식별자 사용
+- 마이크 캡처와 송출 중 음소거
+- GPS, 기기 기울기, 배터리 상태 수집
+- Screen Wake Lock
+- LTE/Wi-Fi 단절 감지와 재연결
+- 네트워크 상태 기반 720p/540p/360p 품질 조절
+- Android 세로 화면과 safe area 대응
 
 ## 실행
 
 ```bash
 cp .env.example .env
-npm install
-npm run dev
+pnpm install
+pnpm dev
 ```
 
-같은 Wi-Fi의 Android 기기에서 개발 서버로 접근할 때에도 카메라/GPS 테스트에는 HTTPS가
-필요합니다. 운영에서는 Nginx 등의 HTTPS 경로 아래에 `dist/`를 배포하세요.
+카메라, 마이크, GPS와 기기 센서 권한에는 HTTPS가 필요합니다.
 
-## API 계약
+## 기기 등록 API
 
-송출 권한:
+```http
+POST /auth-policy/device-bootstrap/register
+Content-Type: application/json
 
-```text
-GET {VITE_STREAM_API_BASE_URL}/api/v1/streams/{streamId}/publish
-Authorization: Bearer <access token>
-```
-
-응답:
-
-```json
 {
-  "whipUrl": "https://example.com/webrtc/raw/CID001/whip?token=...",
-  "iceServers": []
+  "provisioningToken": "<관리자가 발급한 코드>",
+  "displayName": "현장 Pixel",
+  "deviceType": "mobile",
+  "sensors": [{ "sensorId": "front", "sensorType": "camera" }]
 }
 ```
 
-센서 텔레메트리는 기본적으로 `POST /api/telemetry/`에 2초 간격으로 전송합니다. 기존
-백엔드가 확장 필드를 아직 허용하지 않는 경우 orientation/battery 필드를 수용하도록
-telemetry DTO를 확장하거나 모바일 전용 ingest endpoint를 추가해야 합니다.
+요청에는 `groupId`, `streamId`, `path`를 포함하지 않습니다.
 
-구체적인 서버 계약과 백엔드 작업은
-[`docs/telemetry-contract.md`](docs/telemetry-contract.md)에 정리되어 있습니다.
+## 송출 세션 API
 
-## 개발 프로세스
+```http
+POST /media-control/api/v1/device/publish-sessions
+X-GCS-Device-UUID: <device UUID>
+X-GCS-Device-Credential: <device credential>
+Content-Type: application/json
+
+{ "sensorId": "front" }
+```
+
+서버가 등록 장비의 그룹과 스트림을 결정하여 `streamId`, `publishUrl`, `publishToken`, `renewalToken`, `iceServers`를 반환합니다. 모바일은 `publishToken`을 WHIP 요청의 Bearer 인증으로 사용합니다.
+
+## 검증
+
+```bash
+pnpm check
+```
+
+`check`는 엄격한 TypeScript 검사, 전체 테스트와 프로덕션 빌드를 순서대로 실행합니다.
+
+## 프로젝트 문서
 
 - [기여 및 커밋/PR 규칙](CONTRIBUTING.md)
 - [Git workflow와 tag 정책](docs/git-workflow.md)
 - [Frontend architecture](docs/frontend-architecture.md)
-- [순서가 있는 Issue backlog](docs/issue-backlog.md)
-- [고정 실행 순서와 PR queue](docs/roadmap.md)
+- [Issue backlog](docs/issue-backlog.md)
+- [Roadmap](docs/roadmap.md)

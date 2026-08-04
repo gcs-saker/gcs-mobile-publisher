@@ -52,12 +52,10 @@ describe("IndexedDB repositories", () => {
     await repository.put("publisher", {
       preferredQuality: "medium",
       schemaVersion: 1,
-      streamId: "CID007",
       updatedAt: 10,
     });
     await expect(repository.get("publisher")).resolves.toMatchObject({
       preferredQuality: "medium",
-      streamId: "CID007",
     });
     db.close();
   });

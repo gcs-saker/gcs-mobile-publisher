@@ -21,7 +21,6 @@ export interface WriteRepository<TKey, TValue> extends ReadRepository<TKey, TVal
 
 export interface PublisherSettings extends VersionedRecord {
   preferredQuality: VideoQuality;
-  streamId: string;
 }
 
 export interface QueuedTelemetry extends VersionedRecord, IdentifiedRecord {
