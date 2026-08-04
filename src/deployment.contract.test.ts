@@ -11,6 +11,15 @@ describe("publisher deployment contract", () => {
     expect(readProjectFile("vite.config.ts")).toContain('base: "/publisher/"');
   });
 
+  it("keeps the service worker and offline shell inside the publisher scope", () => {
+    const entrypoint = readProjectFile("src/main.tsx");
+    const serviceWorker = readProjectFile("public/sw.js");
+
+    expect(entrypoint).toContain('register("/publisher/sw.js", { scope: "/publisher/" })');
+    expect(serviceWorker).toContain('const APP_BASE = "/publisher/"');
+    expect(serviceWorker).not.toMatch(/caches\.match\("\/index\.html"\)/);
+  });
+
   it("packages the application with an isolated health endpoint", () => {
     const dockerfile = readProjectFile("Dockerfile");
     const nginxConfiguration = readProjectFile("deploy/nginx.conf");

@@ -1,5 +1,6 @@
-const CACHE_NAME = "gcs-mobile-publisher-v1";
-const APP_SHELL = ["/", "/index.html", "/manifest.webmanifest"];
+const CACHE_NAME = "gcs-mobile-publisher-v2";
+const APP_BASE = "/publisher/";
+const APP_SHELL = [APP_BASE, `${APP_BASE}index.html`, `${APP_BASE}manifest.webmanifest`];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(APP_SHELL)));
@@ -24,6 +25,8 @@ self.addEventListener("fetch", (event) => {
         caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
         return response;
       })
-      .catch(() => caches.match(event.request).then((cached) => cached || caches.match("/index.html"))),
+      .catch(() =>
+        caches.match(event.request).then((cached) => cached || caches.match(`${APP_BASE}index.html`)),
+      ),
   );
 });
