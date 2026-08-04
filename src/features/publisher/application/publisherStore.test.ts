@@ -9,7 +9,7 @@ const initialState: PublisherState = {
   muted: false,
   quality: "high",
   status: "idle",
-  streamId: "CID001",
+  streamId: "",
 };
 
 describe("publisherStore", () => {
@@ -43,7 +43,7 @@ describe("publisherStore", () => {
 
   it("resets to a copy of the initial state", () => {
     const store = createPublisherStore(initialState);
-    store.setState({ streamId: "CID999", status: "live" });
+    store.setState({ streamId: "raw.device-1.front", status: "live" });
     store.reset();
     expect(store.getSnapshot()).toEqual(initialState);
   });

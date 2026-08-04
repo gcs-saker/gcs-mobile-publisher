@@ -1,136 +1,34 @@
 import { describe, expect, it, vi } from "vitest";
-import {
-  AuthenticationApiError,
-  HttpAuthenticationGateway,
-} from "./HttpAuthenticationGateway";
+import { HttpAuthenticationGateway } from "./HttpAuthenticationGateway";
 
 function response(body: unknown, status = 200): Response {
   return Response.json(body, { status });
 }
 
-const TOKEN_RESPONSE = {
-  access_token: "access",
-  expires_in_minutes: 30,
-  role: "viewer",
-  token_type: "bearer",
-  username: "test1",
-};
-
-const API_CONFIGURATION = {
-  baseUrl: "/auth-policy/auth",
-  now: () => 1_000,
-};
-
 describe("HttpAuthenticationGateway", () => {
-  it("signs up through the deployed auth-policy contract", async () => {
+  it("authenticates UUID and credential without accepting a client group", async () => {
     const fetcher = vi.fn<typeof fetch>(async () => response({
-      company_id: 1,
-      email: "test1@example.com",
-      id: 7,
-      role: "viewer",
-      username: "test1",
+      credentialVersion: 1, devicePolicyVersion: 2, deviceUuid: "device-1", groupId: "co-a",
+    }));
+    const gateway = new HttpAuthenticationGateway({ baseUrl: "/auth-policy" }, fetcher);
+    await expect(gateway.authenticate({ credential: "secret", deviceUuid: "device-1" })).resolves.toEqual({
+      credential: "secret", deviceUuid: "device-1",
+    });
+    expect(fetcher).toHaveBeenCalledWith("/auth-policy/policy/devices/authenticate", expect.objectContaining({
+      body: JSON.stringify({ credential: "secret", deviceUuid: "device-1" }), method: "POST",
+    }));
+  });
+
+  it("registers a front camera without sending a group or stream destination", async () => {
+    const fetcher = vi.fn<typeof fetch>(async () => response({
+      credential: "secret", deviceType: "mobile", deviceUuid: "device-1", displayName: "Pixel",
+      sensors: [], status: "pending", streamPaths: [],
     }, 201));
-    const gateway = new HttpAuthenticationGateway(
-      API_CONFIGURATION,
-      fetcher,
-    );
-    const request = {
-      email: "test1@example.com",
-      inviteCode: "invite",
-      password: "strong-password",
-      role: "viewer" as const,
-      username: "test1",
-    };
-
-    await expect(gateway.signup(request)).resolves.toMatchObject({
-      companyId: 1,
-      username: "test1",
-    });
-    expect(fetcher).toHaveBeenCalledWith(
-      "/auth-policy/auth/signup",
-      expect.objectContaining({
-        body: JSON.stringify(request),
-        credentials: "include",
-        headers: expect.objectContaining({ "X-GCS-CSRF": "same-origin" }),
-        method: "POST",
-      }),
-    );
-  });
-
-  it("logs in and decodes the snake case token response", async () => {
-    const fetcher = vi.fn<typeof fetch>(async () => response(TOKEN_RESPONSE));
-    const gateway = new HttpAuthenticationGateway(
-      API_CONFIGURATION,
-      fetcher,
-    );
-
-    await expect(gateway.login({
-      password: "strong-password",
-      username: "test1",
-    })).resolves.toMatchObject({
-      accessToken: "access",
-      role: "viewer",
-      username: "test1",
-    });
-  });
-
-  it("refreshes through the HttpOnly cookie without a token body", async () => {
-    const fetcher = vi.fn<typeof fetch>(async () => response(TOKEN_RESPONSE));
-    const gateway = new HttpAuthenticationGateway(
-      API_CONFIGURATION,
-      fetcher,
-    );
-
-    await gateway.refresh();
-
-    expect(fetcher).toHaveBeenCalledWith(
-      "/auth-policy/auth/refresh",
-      expect.objectContaining({
-        credentials: "include",
-        headers: expect.objectContaining({ "X-GCS-CSRF": "same-origin" }),
-        method: "POST",
-      }),
-    );
-    const requestInit = fetcher.mock.calls[0]?.[1];
-    expect(requestInit).not.toHaveProperty("body");
-  });
-
-  it("parses the server detail without exposing unrelated response content", async () => {
-    const fetcher = vi.fn<typeof fetch>(
-      async () => response({ detail: "Invalid credentials" }, 401),
-    );
-    const gateway = new HttpAuthenticationGateway(
-      API_CONFIGURATION,
-      fetcher,
-    );
-
-    const failure = gateway.login({ password: "wrong-password", username: "test1" });
-    await expect(failure).rejects.toBeInstanceOf(AuthenticationApiError);
-    await expect(failure).rejects.toMatchObject({
-      message: "Invalid credentials",
-      status: 401,
-    });
-  });
-
-  it("logs out with the bearer token and same-origin protection", async () => {
-    const fetcher = vi.fn<typeof fetch>(async () => new Response(null, { status: 204 }));
-    const gateway = new HttpAuthenticationGateway(
-      API_CONFIGURATION,
-      fetcher,
-    );
-
-    await gateway.logout("access");
-
-    expect(fetcher).toHaveBeenCalledWith(
-      "/auth-policy/auth/logout",
-      expect.objectContaining({
-        credentials: "include",
-        headers: expect.objectContaining({
-          Authorization: "Bearer access",
-          "X-GCS-CSRF": "same-origin",
-        }),
-        method: "POST",
-      }),
-    );
+    const gateway = new HttpAuthenticationGateway({ baseUrl: "/auth-policy" }, fetcher);
+    await gateway.register({ deviceName: "Pixel", provisioningToken: "token" });
+    const body = JSON.parse(String(fetcher.mock.calls[0]?.[1]?.body)) as Record<string, unknown>;
+    expect(body).toMatchObject({ deviceType: "mobile", displayName: "Pixel", provisioningToken: "token" });
+    expect(body).not.toHaveProperty("groupId");
+    expect(body).not.toHaveProperty("streamPaths");
   });
 });

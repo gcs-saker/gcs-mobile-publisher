@@ -41,12 +41,10 @@ export function PublisherScreen({
         onPrepare={controller.prepare}
         onPublish={controller.publish}
         onStop={controller.stop}
-        onStreamIdChange={controller.setStreamId}
         onToggleMute={controller.toggleMute}
         quality={controller.quality}
         sensorError={controller.sensorError}
         status={controller.status}
-        streamId={controller.streamId}
       />
     </main>
   );

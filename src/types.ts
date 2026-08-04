@@ -37,7 +37,13 @@ export interface TelemetryPayload extends SensorSnapshot {
   userAgent: string;
 }
 
-export interface PublishAuthorization {
-  whipUrl: string;
+export interface PublishSession {
   iceServers: RTCIceServer[];
+  publishToken: string;
+  publishTokenExpiresAt: string;
+  publishUrl: string;
+  renewalToken: string;
+  renewalTokenExpiresAt: string;
+  sessionId: string;
+  streamId: string;
 }

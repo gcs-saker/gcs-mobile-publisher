@@ -1,20 +1,17 @@
-import type {
-  AuthSession,
-  AuthSessionRepository,
-} from "../contracts/authentication";
+import type { AuthenticatedDevice, AuthSessionRepository } from "../contracts/authentication";
 
 export class MemoryAuthSessionRepository implements AuthSessionRepository {
-  private session: AuthSession | null = null;
+  private session: AuthenticatedDevice | null = null;
 
   async clear(): Promise<void> {
     this.session = null;
   }
 
-  async load(): Promise<AuthSession | null> {
-    return this.session;
+  async load(): Promise<AuthenticatedDevice | null> {
+    return this.session ? { ...this.session } : null;
   }
 
-  async save(session: AuthSession): Promise<void> {
-    this.session = session;
+  async save(session: AuthenticatedDevice): Promise<void> {
+    this.session = { ...session };
   }
 }

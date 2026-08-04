@@ -46,6 +46,7 @@ export async function createWhipSession(
   media: MediaStream,
   whipUrl: string,
   iceServers: RTCIceServer[],
+  publishToken: string,
   onConnectionChange: (state: RTCPeerConnectionState) => void,
   fetcher: typeof fetch,
   peerConnections: PeerConnectionFactory,
@@ -60,7 +61,11 @@ export async function createWhipSession(
   if (!pc.localDescription?.sdp) throw new Error("WebRTC SDP 생성에 실패했습니다.");
   const response = await fetcher(whipUrl, {
     method: "POST",
-    headers: { "Content-Type": "application/sdp", Accept: "application/sdp" },
+    headers: {
+      "Content-Type": "application/sdp",
+      Accept: "application/sdp",
+      Authorization: `Bearer ${publishToken}`,
+    },
     body: pc.localDescription.sdp,
   });
   if (!response.ok) {

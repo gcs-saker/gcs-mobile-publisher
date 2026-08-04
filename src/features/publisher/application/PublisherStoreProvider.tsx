@@ -6,22 +6,31 @@ import {
   useSyncExternalStore,
 } from "react";
 import { useRuntime } from "../../../app/RuntimeProvider";
-import { config } from "../../../config";
 import {
   createPublisherStore,
   type PublisherState,
   type PublisherStore,
 } from "./publisherStore";
+import type { PublisherGateway } from "../contracts/publisherGateway";
+import { HttpPublisherGateway } from "../infrastructure/HttpPublisherGateway";
 
-const PublisherStoreContext = createContext<PublisherStore | null>(null);
+export interface PublisherDependencies {
+  gateway: PublisherGateway;
+  store: PublisherStore;
+}
+
+const PublisherStoreContext = createContext<PublisherDependencies | null>(null);
 
 export interface PublisherStoreProviderProps extends PropsWithChildren {
   store?: PublisherStore;
+  gateway?: PublisherGateway;
 }
 
-export function PublisherStoreProvider({ children, store }: PublisherStoreProviderProps) {
+export function PublisherStoreProvider({ children, gateway, store }: PublisherStoreProviderProps) {
   const runtime = useRuntime();
   const storeRef = useRef<PublisherStore | null>(null);
+  const gatewayRef = useRef<PublisherGateway | null>(null);
+  gatewayRef.current ??= gateway ?? new HttpPublisherGateway(runtime.fetch);
   if (!storeRef.current) {
     storeRef.current = store ?? createPublisherStore({
       generation: 0,
@@ -31,20 +40,29 @@ export function PublisherStoreProvider({ children, store }: PublisherStoreProvid
       muted: false,
       quality: "high",
       status: "idle",
-      streamId: config.defaultStreamId,
+      streamId: "",
     });
   }
   return (
-    <PublisherStoreContext.Provider value={storeRef.current}>
+    <PublisherStoreContext.Provider value={{
+      gateway: gatewayRef.current,
+      store: storeRef.current,
+    }}>
       {children}
     </PublisherStoreContext.Provider>
   );
 }
 
 export function usePublisherStoreApi(): PublisherStore {
-  const store = useContext(PublisherStoreContext);
-  if (!store) throw new Error("PublisherStoreProvider is required");
-  return store;
+  const dependencies = useContext(PublisherStoreContext);
+  if (!dependencies) throw new Error("PublisherStoreProvider is required");
+  return dependencies.store;
+}
+
+export function usePublisherGateway(): PublisherGateway {
+  const dependencies = useContext(PublisherStoreContext);
+  if (!dependencies) throw new Error("PublisherStoreProvider is required");
+  return dependencies.gateway;
 }
 
 export function usePublisherStore<T>(selector: (state: PublisherState) => T): T {

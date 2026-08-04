@@ -39,15 +39,10 @@ export function AuthenticationProvider({
   const value = useMemo<AuthenticationDependencies>(() => ({
     manager: dependencies?.manager ?? new AuthSessionManager(
       new HttpAuthenticationGateway(
-        {
-          baseUrl: config.authApiBaseUrl,
-          now: runtime.clock.now,
-        },
+        { baseUrl: config.deviceApiBaseUrl },
         runtime.fetch,
       ),
       new MemoryAuthSessionRepository(),
-      runtime.clock,
-      { refreshLeewayMs: 60_000 },
     ),
     store: authenticationStore,
   }), [authenticationStore, dependencies, runtime]);

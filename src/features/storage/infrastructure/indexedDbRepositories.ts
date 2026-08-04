@@ -67,7 +67,6 @@ function isPublisherSettings(value: unknown): value is PublisherSettings {
   const quality = value["preferredQuality"];
   return typeof value["schemaVersion"] === "number"
     && typeof value["updatedAt"] === "number"
-    && typeof value["streamId"] === "string"
     && (quality === "high" || quality === "medium" || quality === "low");
 }
 
