@@ -51,6 +51,7 @@ interface AccountTelemetryRequest {
   pitchDeg: number | null;
   rollDeg: number | null;
   uuid: string;
+  velocity: number | null;
   yawDeg: number | null;
 }
 
@@ -65,6 +66,7 @@ function accountTelemetryRequest(payload: TelemetryPayload): AccountTelemetryReq
     pitchDeg: payload.orientation.beta,
     rollDeg: payload.orientation.gamma,
     uuid: payload.uuid,
+    velocity: payload.location.speed,
     yawDeg: payload.orientation.alpha,
   };
 }

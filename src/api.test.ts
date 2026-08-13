@@ -72,12 +72,18 @@ describe("account publish session API", () => {
 
   it("sends flattened mobile telemetry with the account bearer token", async () => {
     const fetcher = vi.fn<typeof fetch>(async () => Response.json({}));
-    await sendTelemetry({ ...emptySnapshot, epochTime: 3, userAgent: "iPhone", uuid: "raw.account-a.front" }, identity, fetcher);
+    await sendTelemetry({
+      ...emptySnapshot,
+      epochTime: 3,
+      location: { ...emptySnapshot.location, speed: 4.5 },
+      userAgent: "iPhone",
+      uuid: "raw.account-a.front",
+    }, identity, fetcher);
     expect(fetcher).toHaveBeenCalledWith("/auth-policy/telemetry/", expect.objectContaining({
       headers: expect.objectContaining({ Authorization: "Bearer login-access-token" }), method: "POST",
     }));
     const body = JSON.parse(String(fetcher.mock.calls[0]?.[1]?.body)) as Record<string, unknown>;
-    expect(body).toMatchObject({ epochTime: 3, uuid: "raw.account-a.front" });
+    expect(body).toMatchObject({ epochTime: 3, uuid: "raw.account-a.front", velocity: 4.5 });
     expect(body).not.toHaveProperty("location");
   });
 });
