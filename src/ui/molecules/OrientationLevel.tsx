@@ -1,26 +1,44 @@
+import { useState } from "react";
+import {
+  compassIndicator,
+  tiltIndicator,
+  type TiltBaseline,
+} from "../../features/sensors/domain/orientationIndicators";
 import type { SensorSnapshot } from "../../types";
 
 export interface OrientationLevelProps {
   orientation: SensorSnapshot["orientation"];
 }
 
-function clampTilt(value: number | null): number {
-  return Math.max(-36, Math.min(36, value ?? 0));
-}
+const DIRECTIONS = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"] as const;
 
 export function OrientationLevel({ orientation }: OrientationLevelProps) {
+  const [baseline, setBaseline] = useState<TiltBaseline>({ beta: 0, gamma: 0 });
+  const compass = compassIndicator(orientation.alpha, orientation.absolute);
+  const tilt = tiltIndicator(orientation, baseline);
+
+  function calibrate(): void {
+    setBaseline({ beta: orientation.beta ?? 0, gamma: orientation.gamma ?? 0 });
+  }
+
   return (
-    <section className="level" aria-label="기기 기울기">
+    <section className="level" aria-label="기기 기울기와 방위">
       <div className="level__crosshair" aria-hidden="true">
-        <span
-          className="level__dot"
-          style={{
-            transform: `translate(${clampTilt(orientation.gamma)}px, ${clampTilt(orientation.beta)}px)`,
-          }}
-        />
+        {DIRECTIONS.map((direction) => (
+          <span className={`level__direction level__direction--${direction.toLowerCase()}`} key={direction}>
+            {direction}
+          </span>
+        ))}
+        <span className="level__dot" style={{
+          transform: `translate(${tilt.horizontalPixels}px, ${tilt.verticalPixels}px)`,
+        }} />
       </div>
-      <span>좌우 {orientation.gamma?.toFixed(1) ?? "--"}°</span>
-      <span>앞뒤 {orientation.beta?.toFixed(1) ?? "--"}°</span>
+      <div className="level__readings">
+        <strong>{compass ? `${compass.heading.toFixed(0)}° ${compass.direction}` : "방위 보정 필요"}</strong>
+        <span>{tilt.pitchLabel} {Math.abs(tilt.pitchDegrees).toFixed(1)}°</span>
+        <span>{tilt.rollLabel} {Math.abs(tilt.rollDegrees).toFixed(1)}°</span>
+        <button className="level__calibrate" onClick={calibrate} type="button">현재 자세를 수평으로</button>
+      </div>
     </section>
   );
 }
