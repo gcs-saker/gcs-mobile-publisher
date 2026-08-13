@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { emptySnapshot } from "./sensors";
 import type { SensorSnapshot } from "./types";
 import type { BatteryPort, Clock, OrientationMonitor } from "./app/ports";
+import { createSpeedStabilizer } from "./features/sensors/domain/speedStabilizer";
 
 export interface DeviceSensorDependencies {
   battery: BatteryPort;
@@ -16,6 +17,7 @@ export function useDeviceSensors(dependencies: DeviceSensorDependencies) {
   const watchId = useRef<number | null>(null);
   const unsubscribeOrientation = useRef<(() => void) | null>(null);
   const battery = useRef<BatteryManager | null>(null);
+  const speed = useRef(createSpeedStabilizer());
 
   const updateBattery = useCallback(() => {
     const value = battery.current;
@@ -45,6 +47,7 @@ export function useDeviceSensors(dependencies: DeviceSensorDependencies) {
 
   const start = useCallback(async () => {
     setError(null);
+    speed.current.reset();
     unsubscribeOrientation.current?.();
     unsubscribeOrientation.current = dependencies.orientation.subscribe(onOrientation);
 
@@ -60,7 +63,7 @@ export function useDeviceSensors(dependencies: DeviceSensorDependencies) {
       return;
     }
     watchId.current = dependencies.geolocation.watchPosition(
-      ({ coords }) => setSnapshot((current) => ({
+      ({ coords, timestamp }) => setSnapshot((current) => ({
         ...current,
         capturedAt: dependencies.clock.isoNow(),
         location: {
@@ -68,7 +71,13 @@ export function useDeviceSensors(dependencies: DeviceSensorDependencies) {
           longitude: coords.longitude,
           altitude: coords.altitude,
           accuracy: coords.accuracy,
-          speed: coords.speed,
+          speed: speed.current.update({
+            accuracy: coords.accuracy,
+            latitude: coords.latitude,
+            longitude: coords.longitude,
+            measuredAtMs: timestamp,
+            reportedSpeedMps: coords.speed,
+          }),
           heading: coords.heading,
         },
       })),
@@ -87,6 +96,7 @@ export function useDeviceSensors(dependencies: DeviceSensorDependencies) {
     battery.current?.removeEventListener("levelchange", updateBattery);
     battery.current?.removeEventListener("chargingchange", updateBattery);
     battery.current = null;
+    speed.current.reset();
   }, [dependencies.geolocation, updateBattery]);
 
   useEffect(() => stop, [stop]);
