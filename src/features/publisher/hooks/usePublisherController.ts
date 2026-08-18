@@ -172,6 +172,7 @@ export function usePublisherController(identity: AuthenticatedAccount | null) {
   usePublisherRuntimeEffects({
     connectionCoordinator, dispatch, gateway, identity, mediaController, reconnectScheduler,
     renewalTimerRef, runtime, scheduleReconnect, sensorSnapshot: snapshot, startedAtRef, status, store,
+    wakeLockController,
   });
   useEffect(() => stop, [stop]);
 

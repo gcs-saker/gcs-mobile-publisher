@@ -15,6 +15,10 @@ export interface NetworkMonitor {
   subscribe(onOnline: () => void, onOffline: () => void): () => void;
 }
 
+export interface PageLifecycleMonitor {
+  subscribeResume(listener: () => void): () => void;
+}
+
 export interface RandomSource {
   next(): number;
 }
@@ -47,6 +51,7 @@ export interface RuntimeDependencies {
   fetch: typeof fetch;
   geolocation: Geolocation | null;
   mediaDevices: MediaDevices | null;
+  lifecycle: PageLifecycleMonitor;
   network: NetworkMonitor;
   orientation: OrientationMonitor;
   peerConnections: PeerConnectionFactory;

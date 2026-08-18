@@ -9,7 +9,9 @@ import { ReconnectScheduler } from "../application/ReconnectScheduler";
 import type { PublisherStore } from "../application/publisherStore";
 import type { PublisherGateway } from "../contracts/publisherGateway";
 import type { PublisherEvent, PublisherTransition } from "../domain/publisherMachine";
+import { decidePublisherResume } from "../domain/publisherResumePolicy";
 import { MediaCaptureController } from "../infrastructure/MediaCaptureController";
+import { WakeLockController } from "../infrastructure/WakeLockController";
 
 interface PublisherRuntimeEffectsOptions {
   connectionCoordinator: PublisherConnectionCoordinator;
@@ -25,12 +27,14 @@ interface PublisherRuntimeEffectsOptions {
   startedAtRef: MutableRefObject<number>;
   status: string;
   store: PublisherStore;
+  wakeLockController: WakeLockController;
 }
 
 export function usePublisherRuntimeEffects(options: PublisherRuntimeEffectsOptions) {
   const {
     connectionCoordinator, dispatch, gateway, identity, mediaController, reconnectScheduler,
     renewalTimerRef, runtime, scheduleReconnect, sensorSnapshot, startedAtRef, status, store,
+    wakeLockController,
   } = options;
   const runtimeCoordinatorRef = useRef<PublisherRuntimeCoordinator | null>(null);
   runtimeCoordinatorRef.current ??= new PublisherRuntimeCoordinator(sensorSnapshot);
@@ -58,6 +62,33 @@ export function usePublisherRuntimeEffects(options: PublisherRuntimeEffectsOptio
       if (lost.accepted) store.setState({ message: "네트워크가 끊겼습니다. 연결 복구를 기다립니다." });
     },
   ), [dispatch, mediaController, reconnectScheduler, runtime.network, scheduleReconnect, store]);
+
+  useEffect(() => runtime.lifecycle.subscribeResume(() => {
+    if (!mediaController.stream) return;
+    void wakeLockController.acquire(runtime.wakeLock);
+    const current = store.getSnapshot();
+    if (current.status !== "live" && current.status !== "reconnecting") return;
+    const session = connectionCoordinator.session;
+    if (decidePublisherResume(session, runtime.clock.now()) === "renew" && session) {
+      void runtimeCoordinator.runRenewal(async () => {
+        try {
+          const renewed = await gateway.renew(session);
+          if (connectionCoordinator.session?.sessionId === session.sessionId) {
+            connectionCoordinator.replaceSession(renewed);
+          }
+        } catch {
+          const lost = dispatch({ type: "CONNECTION_LOST", generation: current.generation });
+          if (lost.accepted || current.status === "reconnecting") scheduleReconnect(current.generation);
+        }
+      });
+      return;
+    }
+    const lost = dispatch({ type: "CONNECTION_LOST", generation: current.generation });
+    if (lost.accepted || current.status === "reconnecting") scheduleReconnect(current.generation);
+  }), [
+    connectionCoordinator, dispatch, gateway, mediaController, runtime.clock, runtime.lifecycle,
+    runtime.wakeLock, runtimeCoordinator, scheduleReconnect, store, wakeLockController,
+  ]);
 
   useEffect(() => {
     if (status !== "live" || !identity) return;
