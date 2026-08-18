@@ -14,7 +14,7 @@ export interface PublisherControlsProps {
   message: string;
   muted: boolean;
   onInstall(): Promise<void>;
-  onCameraFacingModeChange(value: CameraFacingMode): void;
+  onCameraFacingModeChange(value: CameraFacingMode): Promise<void>;
   onCoordinatePrecisionChange(value: CoordinatePrecision): void;
   onPrepare(): Promise<void>;
   onPublish(): Promise<void>;
@@ -36,7 +36,7 @@ export function PublisherControls(props: PublisherControlsProps) {
     <section className="control-sheet" aria-label="송출 제어">
       <RuntimeStrip canInstall={props.canInstall} isInstalled={props.isInstalled}
         cameraFacingMode={props.cameraFacingMode} coordinatePrecision={props.coordinatePrecision}
-        disabled={props.status !== "idle" && props.status !== "error"}
+        disabled={!(["idle", "error", "live"] as PublisherStatus[]).includes(props.status)}
         onCameraFacingModeChange={props.onCameraFacingModeChange}
         onCoordinatePrecisionChange={props.onCoordinatePrecisionChange}
         onInstall={props.onInstall} quality={props.quality} />

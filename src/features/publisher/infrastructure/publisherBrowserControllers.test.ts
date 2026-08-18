@@ -55,6 +55,64 @@ describe("publisher browser resource controllers", () => {
     }));
   });
 
+  it("switches the live video track only after sender replacement succeeds", async () => {
+    const stopPrevious = vi.fn();
+    const stopNext = vi.fn();
+    const previousTrack = { kind: "video", stop: stopPrevious } as unknown as MediaStreamTrack;
+    const nextTrack = { kind: "video", stop: stopNext } as unknown as MediaStreamTrack;
+    const removeTrack = vi.fn();
+    const addTrack = vi.fn();
+    const activeStream = {
+      addTrack,
+      getAudioTracks: () => [],
+      getTracks: () => [previousTrack],
+      getVideoTracks: () => [previousTrack],
+      removeTrack,
+    } as unknown as MediaStream;
+    const candidate = {
+      getTracks: () => [nextTrack],
+      getVideoTracks: () => [nextTrack],
+    } as unknown as MediaStream;
+    const devices = { getUserMedia: vi.fn()
+      .mockResolvedValueOnce(activeStream)
+      .mockResolvedValueOnce(candidate) } as unknown as MediaDevices;
+    const replaceTrack = vi.fn().mockResolvedValue(undefined);
+    const controller = new MediaCaptureController();
+    await controller.capture(devices, "environment");
+
+    await controller.switchCamera(devices, "user", replaceTrack);
+
+    expect(replaceTrack).toHaveBeenCalledWith(nextTrack);
+    expect(removeTrack).toHaveBeenCalledWith(previousTrack);
+    expect(stopPrevious).toHaveBeenCalledOnce();
+    expect(addTrack).toHaveBeenCalledWith(nextTrack);
+    expect(stopNext).not.toHaveBeenCalled();
+  });
+
+  it("keeps the current camera when live track replacement fails", async () => {
+    const stopPrevious = vi.fn();
+    const stopNext = vi.fn();
+    const previousTrack = { kind: "video", stop: stopPrevious } as unknown as MediaStreamTrack;
+    const nextTrack = { kind: "video", stop: stopNext } as unknown as MediaStreamTrack;
+    const activeStream = {
+      addTrack: vi.fn(), getAudioTracks: () => [], getTracks: () => [previousTrack],
+      getVideoTracks: () => [previousTrack], removeTrack: vi.fn(),
+    } as unknown as MediaStream;
+    const candidate = { getTracks: () => [nextTrack], getVideoTracks: () => [nextTrack] } as unknown as MediaStream;
+    const devices = { getUserMedia: vi.fn()
+      .mockResolvedValueOnce(activeStream)
+      .mockResolvedValueOnce(candidate) } as unknown as MediaDevices;
+    const controller = new MediaCaptureController();
+    await controller.capture(devices, "environment");
+
+    await expect(controller.switchCamera(devices, "user", async () => {
+      throw new Error("replace failed");
+    })).rejects.toThrow("replace failed");
+
+    expect(stopNext).toHaveBeenCalledOnce();
+    expect(stopPrevious).not.toHaveBeenCalled();
+  });
+
   it("releases connection and publish session exactly once", async () => {
     const close = vi.fn();
     const end = vi.fn().mockResolvedValue(undefined);

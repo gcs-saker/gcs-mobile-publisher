@@ -98,10 +98,28 @@ export function usePublisherController(identity: AuthenticatedAccount | null) {
     }
   }, [cameraFacingMode, dispatch, mediaController, runtime, startSensors, stopSensors, store, wakeLockController]);
 
-  const setCameraFacingMode = useCallback((value: CameraFacingMode) => {
-    if (store.getSnapshot().status !== "idle" && store.getSnapshot().status !== "error") return;
-    store.setState({ cameraFacingMode: value });
-  }, [store]);
+  const setCameraFacingMode = useCallback(async (value: CameraFacingMode) => {
+    const current = store.getSnapshot();
+    if (current.cameraFacingMode === value) return;
+    if (current.status === "idle" || current.status === "error") {
+      store.setState({ cameraFacingMode: value });
+      return;
+    }
+    if (current.status !== "live" || !peerConnection) return;
+    const sender = peerConnection.getSenders().find((candidate) => candidate.track?.kind === "video");
+    if (!sender) {
+      store.setState({ message: "활성 영상 송신기를 찾을 수 없습니다." });
+      return;
+    }
+    store.setState({ message: "카메라를 전환하고 있습니다." });
+    try {
+      await mediaController.switchCamera(runtime.mediaDevices, value, (track) => sender.replaceTrack(track));
+      mediaController.attach(videoRef.current);
+      store.setState({ cameraFacingMode: value, message: "카메라를 전환했습니다." });
+    } catch (reason: unknown) {
+      store.setState({ message: reason instanceof Error ? reason.message : "카메라 전환에 실패했습니다." });
+    }
+  }, [mediaController, peerConnection, runtime.mediaDevices, store]);
 
   const setCoordinatePrecision = useCallback((value: CoordinatePrecision) => {
     store.setState({ coordinatePrecision: value });

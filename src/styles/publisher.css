@@ -212,6 +212,19 @@
   font-weight: 800;
 }
 .runtime-strip select:disabled { opacity: .5; }
+.publisher-settings { flex-basis: 100%; }
+.publisher-settings summary {
+  width: max-content;
+  cursor: pointer;
+  color: var(--color-soft);
+  font-weight: 800;
+}
+.publisher-settings__fields {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  padding-top: 8px;
+}
 .runtime-strip button {
   min-height: 28px;
   margin-left: auto;
