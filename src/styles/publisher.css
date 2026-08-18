@@ -141,6 +141,7 @@
   color: #c9ded2;
   background: rgba(5,14,11,.62);
   font: inherit;
+  white-space: nowrap;
 }
 .level__calibrate:disabled { opacity: .45; }
 

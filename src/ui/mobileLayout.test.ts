@@ -33,6 +33,7 @@ describe("Android mobile layout contract", () => {
     expect(styles).toMatch(/\.topbar__title\s*\{[^}]*min-width:\s*0/);
     expect(styles).toMatch(/\.topbar__title span\s*\{[\s\S]*?text-overflow:\s*ellipsis/);
     expect(styles).toMatch(/\.battery\s*\{[^}]*white-space:\s*nowrap/);
+    expect(styles).toMatch(/\.level__calibrate\s*\{[\s\S]*?white-space:\s*nowrap/);
     expect(styles).toContain("@media (max-width: 359px)");
   });
 });
