@@ -18,6 +18,7 @@ export function useDeviceSensors(dependencies: DeviceSensorDependencies) {
   const unsubscribeOrientation = useRef<(() => void) | null>(null);
   const battery = useRef<BatteryManager | null>(null);
   const speed = useRef(createSpeedStabilizer());
+  const generation = useRef(0);
 
   const updateBattery = useCallback(() => {
     const value = battery.current;
@@ -45,17 +46,33 @@ export function useDeviceSensors(dependencies: DeviceSensorDependencies) {
     }));
   }, [dependencies.clock]);
 
-  const start = useCallback(async () => {
-    setError(null);
-    speed.current.reset();
+  const releaseResources = useCallback(() => {
+    generation.current += 1;
     unsubscribeOrientation.current?.();
+    unsubscribeOrientation.current = null;
+    if (watchId.current !== null && dependencies.geolocation) {
+      dependencies.geolocation.clearWatch(watchId.current);
+    }
+    watchId.current = null;
+    battery.current?.removeEventListener("levelchange", updateBattery);
+    battery.current?.removeEventListener("chargingchange", updateBattery);
+    battery.current = null;
+    speed.current.reset();
+  }, [dependencies.geolocation, updateBattery]);
+
+  const start = useCallback(async () => {
+    releaseResources();
+    const activeGeneration = ++generation.current;
+    setError(null);
     unsubscribeOrientation.current = dependencies.orientation.subscribe(onOrientation);
 
-    battery.current = await dependencies.battery.getBattery();
-    if (battery.current) {
+    const nextBattery = await dependencies.battery.getBattery();
+    if (activeGeneration !== generation.current) return;
+    battery.current = nextBattery;
+    if (nextBattery) {
       updateBattery();
-      battery.current.addEventListener("levelchange", updateBattery);
-      battery.current.addEventListener("chargingchange", updateBattery);
+      nextBattery.addEventListener("levelchange", updateBattery);
+      nextBattery.addEventListener("chargingchange", updateBattery);
     }
 
     if (!dependencies.geolocation) {
@@ -84,20 +101,9 @@ export function useDeviceSensors(dependencies: DeviceSensorDependencies) {
       (reason) => setError(`GPS: ${reason.message}`),
       { enableHighAccuracy: true, maximumAge: 2_000, timeout: 12_000 },
     );
-  }, [dependencies, onOrientation, updateBattery]);
+  }, [dependencies, onOrientation, releaseResources, updateBattery]);
 
-  const stop = useCallback(() => {
-    unsubscribeOrientation.current?.();
-    unsubscribeOrientation.current = null;
-    if (watchId.current !== null && dependencies.geolocation) {
-      dependencies.geolocation.clearWatch(watchId.current);
-    }
-    watchId.current = null;
-    battery.current?.removeEventListener("levelchange", updateBattery);
-    battery.current?.removeEventListener("chargingchange", updateBattery);
-    battery.current = null;
-    speed.current.reset();
-  }, [dependencies.geolocation, updateBattery]);
+  const stop = releaseResources;
 
   useEffect(() => stop, [stop]);
   return { snapshot, error, start, stop };

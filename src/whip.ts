@@ -53,26 +53,28 @@ export async function createWhipSession(
   scheduler: Scheduler,
 ): Promise<RTCPeerConnection> {
   const pc = peerConnections.create({ iceServers });
-  pc.addEventListener("connectionstatechange", () => onConnectionChange(pc.connectionState));
-  media.getTracks().forEach((track) => pc.addTrack(track, media));
-  const offer = await pc.createOffer();
-  await pc.setLocalDescription(offer);
-  await waitForIce(pc, scheduler);
-  if (!pc.localDescription?.sdp) throw new Error("WebRTC SDP 생성에 실패했습니다.");
-  const response = await fetcher(whipUrl, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/sdp",
-      Accept: "application/sdp",
-      Authorization: `Bearer ${publishToken}`,
-    },
-    body: pc.localDescription.sdp,
-  });
-  if (!response.ok) {
+  try {
+    pc.addEventListener("connectionstatechange", () => onConnectionChange(pc.connectionState));
+    media.getTracks().forEach((track) => pc.addTrack(track, media));
+    const offer = await pc.createOffer();
+    await pc.setLocalDescription(offer);
+    await waitForIce(pc, scheduler);
+    if (!pc.localDescription?.sdp) throw new Error("WebRTC SDP 생성에 실패했습니다.");
+    const response = await fetcher(whipUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/sdp",
+        Accept: "application/sdp",
+        Authorization: `Bearer ${publishToken}`,
+      },
+      body: pc.localDescription.sdp,
+    });
+    if (!response.ok) throw new Error(`WHIP 연결 실패 (${response.status})`);
+    await pc.setRemoteDescription({ type: "answer", sdp: await response.text() });
+    await waitForConnection(pc, scheduler);
+    return pc;
+  } catch (error: unknown) {
     pc.close();
-    throw new Error(`WHIP 연결 실패 (${response.status})`);
+    throw error;
   }
-  await pc.setRemoteDescription({ type: "answer", sdp: await response.text() });
-  await waitForConnection(pc, scheduler);
-  return pc;
 }
