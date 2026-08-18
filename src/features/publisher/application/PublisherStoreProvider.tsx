@@ -33,6 +33,8 @@ export function PublisherStoreProvider({ children, gateway, store }: PublisherSt
   gatewayRef.current ??= gateway ?? new HttpPublisherGateway(runtime.fetch);
   if (!storeRef.current) {
     storeRef.current = store ?? createPublisherStore({
+      cameraFacingMode: "environment",
+      coordinatePrecision: 2,
       generation: 0,
       isOnline: runtime.network.online,
       mediaReady: false,

@@ -29,14 +29,18 @@ export function PublisherScreen({
         onLogout={onLogout}
         status={controller.status}
       />
-      <SensorDashboard snapshot={controller.snapshot} />
+      <SensorDashboard coordinatePrecision={controller.coordinatePrecision} snapshot={controller.snapshot} />
       <PublisherControls
         canInstall={controller.canInstall}
         isInstalled={controller.isInstalled}
+        cameraFacingMode={controller.cameraFacingMode}
+        coordinatePrecision={controller.coordinatePrecision}
         mediaReady={controller.mediaReady}
         message={controller.message}
         muted={controller.muted}
         onInstall={controller.install}
+        onCameraFacingModeChange={controller.setCameraFacingMode}
+        onCoordinatePrecisionChange={controller.setCoordinatePrecision}
         onPrepare={controller.prepare}
         onPublish={controller.publish}
         onStop={controller.stop}

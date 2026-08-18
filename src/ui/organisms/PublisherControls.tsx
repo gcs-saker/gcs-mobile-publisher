@@ -3,14 +3,19 @@ import type { PublisherStatus } from "../../types";
 import { ActionButton } from "../atoms/ActionButton";
 import { RuntimeStrip } from "../molecules/RuntimeStrip";
 import { publisherStatusView } from "../publisherViewModel";
+import type { CameraFacingMode, CoordinatePrecision } from "../../features/publisher/domain/publisherSettings";
 
 export interface PublisherControlsProps {
+  cameraFacingMode: CameraFacingMode;
   canInstall: boolean;
+  coordinatePrecision: CoordinatePrecision;
   isInstalled: boolean;
   mediaReady: boolean;
   message: string;
   muted: boolean;
   onInstall(): Promise<void>;
+  onCameraFacingModeChange(value: CameraFacingMode): void;
+  onCoordinatePrecisionChange(value: CoordinatePrecision): void;
   onPrepare(): Promise<void>;
   onPublish(): Promise<void>;
   onStop(): void;
@@ -30,6 +35,10 @@ export function PublisherControls(props: PublisherControlsProps) {
   return (
     <section className="control-sheet" aria-label="송출 제어">
       <RuntimeStrip canInstall={props.canInstall} isInstalled={props.isInstalled}
+        cameraFacingMode={props.cameraFacingMode} coordinatePrecision={props.coordinatePrecision}
+        disabled={props.status !== "idle" && props.status !== "error"}
+        onCameraFacingModeChange={props.onCameraFacingModeChange}
+        onCoordinatePrecisionChange={props.onCoordinatePrecisionChange}
         onInstall={props.onInstall} quality={props.quality} />
       <p className={props.status === "error" || props.sensorError ? "message message--error" : "message"}
         role={props.status === "error" || props.sensorError ? "alert" : "status"}>

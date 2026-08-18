@@ -14,7 +14,10 @@ describe("publisher browser resource controllers", () => {
     const devices = { getUserMedia: vi.fn().mockResolvedValue(stream) } as unknown as MediaDevices;
     const controller = new MediaCaptureController();
 
-    expect(await controller.capture(devices)).toBe(stream);
+    expect(await controller.capture(devices, "environment")).toBe(stream);
+    expect(devices.getUserMedia).toHaveBeenCalledWith(expect.objectContaining({
+      video: expect.objectContaining({ facingMode: { ideal: "environment" } }),
+    }));
     expect(controller.stream).toBe(stream);
     controller.stop();
 
@@ -31,13 +34,25 @@ describe("publisher browser resource controllers", () => {
     } as unknown as MediaDevices;
     const controller = new MediaCaptureController();
 
-    const capture = controller.capture(devices);
+    const capture = controller.capture(devices, "environment");
     controller.stop();
     resolveCapture?.(stream);
 
     await expect(capture).rejects.toMatchObject({ name: "AbortError" });
     expect(stop).toHaveBeenCalledOnce();
     expect(controller.stream).toBeNull();
+  });
+
+  it("requests the user-facing camera when selected", async () => {
+    const stream = { getTracks: () => [] } as unknown as MediaStream;
+    const getUserMedia = vi.fn().mockResolvedValue(stream);
+    const controller = new MediaCaptureController();
+
+    await controller.capture({ getUserMedia } as unknown as MediaDevices, "user");
+
+    expect(getUserMedia).toHaveBeenCalledWith(expect.objectContaining({
+      video: expect.objectContaining({ facingMode: { ideal: "user" } }),
+    }));
   });
 
   it("releases connection and publish session exactly once", async () => {

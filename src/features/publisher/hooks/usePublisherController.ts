@@ -15,13 +15,14 @@ import { MediaCaptureController } from "../infrastructure/MediaCaptureController
 import { WakeLockController } from "../infrastructure/WakeLockController";
 import { usePublisherRuntimeEffects } from "./usePublisherRuntimeEffects";
 import { usePublisherTransition } from "./usePublisherTransition";
+import type { CameraFacingMode, CoordinatePrecision } from "../domain/publisherSettings";
 
 export function usePublisherController(identity: AuthenticatedAccount | null) {
   const runtime = useRuntime();
   const gateway = usePublisherGateway();
   const store = usePublisherStoreApi();
   const state = usePublisherStore((snapshot) => snapshot);
-  const { isOnline, mediaReady, message, muted, quality, status, streamId } = state;
+  const { cameraFacingMode, coordinatePrecision, isOnline, mediaReady, message, muted, quality, status, streamId } = state;
   const [media, setMedia] = useState<MediaStream | null>(null);
   const [peerConnection, setPeerConnection] = useState<RTCPeerConnection | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -68,7 +69,7 @@ export function usePublisherController(identity: AuthenticatedAccount | null) {
     if (!requested.accepted) return;
     const generation = requested.state.generation;
     try {
-      const nextMedia = await mediaController.capture(runtime.mediaDevices);
+      const nextMedia = await mediaController.capture(runtime.mediaDevices, cameraFacingMode);
       setMedia(nextMedia);
       store.setState({ mediaReady: true });
       mediaController.attach(videoRef.current);
@@ -95,7 +96,16 @@ export function usePublisherController(identity: AuthenticatedAccount | null) {
         message: reason instanceof Error ? reason.message : "장치 권한을 받을 수 없습니다.",
       });
     }
-  }, [dispatch, mediaController, runtime, startSensors, stopSensors, store, wakeLockController]);
+  }, [cameraFacingMode, dispatch, mediaController, runtime, startSensors, stopSensors, store, wakeLockController]);
+
+  const setCameraFacingMode = useCallback((value: CameraFacingMode) => {
+    if (store.getSnapshot().status !== "idle" && store.getSnapshot().status !== "error") return;
+    store.setState({ cameraFacingMode: value });
+  }, [store]);
+
+  const setCoordinatePrecision = useCallback((value: CoordinatePrecision) => {
+    store.setState({ coordinatePrecision: value });
+  }, [store]);
 
   const publish = useCallback(async () => {
     const activeMedia = mediaController.stream;
@@ -181,8 +191,8 @@ export function usePublisherController(identity: AuthenticatedAccount | null) {
   useEffect(() => stop, [stop]);
 
   return {
-    canInstall: pwa.canInstall, install: pwa.install, isInstalled: pwa.isInstalled,
+    cameraFacingMode, canInstall: pwa.canInstall, coordinatePrecision, install: pwa.install, isInstalled: pwa.isInstalled,
     isOnline, mediaReady, message, muted, prepare, publish, quality, sensorError,
-    snapshot, status, stop, streamId, toggleMute, videoRef,
+    setCameraFacingMode, setCoordinatePrecision, snapshot, status, stop, streamId, toggleMute, videoRef,
   } as const;
 }
