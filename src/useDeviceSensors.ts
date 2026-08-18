@@ -101,7 +101,7 @@ export function useDeviceSensors(dependencies: DeviceSensorDependencies) {
         },
       })),
       (reason) => setError(`GPS: ${reason.message}`),
-      { enableHighAccuracy: true, maximumAge: 2_000, timeout: 12_000 },
+      { enableHighAccuracy: true, maximumAge: 0, timeout: 12_000 },
     );
   }, [dependencies, onOrientation, releaseResources, updateBattery]);
 

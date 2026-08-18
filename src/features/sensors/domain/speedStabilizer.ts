@@ -15,8 +15,11 @@ export interface SpeedStabilizer {
 const EARTH_RADIUS_METERS = 6_371_000;
 const MAX_ACCEPTED_ACCURACY_METERS = 30;
 const MAX_REASONABLE_SPEED_MPS = 80;
-const STATIONARY_THRESHOLD_MPS = 0.5;
-const WINDOW_SIZE = 5;
+const LOW_SPEED_MPS = 1.5;
+const STATIONARY_CANDIDATE_MPS = 0.7;
+const STATIONARY_FIX_COUNT = 3;
+const STALE_AFTER_MS = 8_000;
+const UNCERTAINTY_FACTOR = 0.5;
 
 function radians(value: number): number {
   return value * Math.PI / 180;
@@ -32,13 +35,6 @@ function distanceMeters(first: PositionReading, second: PositionReading): number
   return 2 * EARTH_RADIUS_METERS * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
-function median(values: readonly number[]): number {
-  const sorted = [...values].sort((left, right) => left - right);
-  const middle = Math.floor(sorted.length / 2);
-  if (sorted.length % 2 === 1) return sorted[middle] ?? 0;
-  return ((sorted[middle - 1] ?? 0) + (sorted[middle] ?? 0)) / 2;
-}
-
 function usableReportedSpeed(value: number | null): number | null {
   if (value === null || !Number.isFinite(value) || value < 0 || value > MAX_REASONABLE_SPEED_MPS) return null;
   return value;
@@ -46,34 +42,70 @@ function usableReportedSpeed(value: number | null): number | null {
 
 export function createSpeedStabilizer(): SpeedStabilizer {
   let previous: PositionReading | null = null;
-  let samples: number[] = [];
   let stableValue: number | null = null;
+  let lastValidAtMs: number | null = null;
+  let lastSeenAtMs: number | null = null;
+  let stationaryFixes = 0;
 
   return {
     reset() {
       previous = null;
-      samples = [];
       stableValue = null;
+      lastValidAtMs = null;
+      lastSeenAtMs = null;
+      stationaryFixes = 0;
     },
     update(reading) {
+      if (lastSeenAtMs !== null && reading.measuredAtMs <= lastSeenAtMs) return stableValue;
+      lastSeenAtMs = reading.measuredAtMs;
+
       if (!Number.isFinite(reading.accuracy) || reading.accuracy > MAX_ACCEPTED_ACCURACY_METERS) {
+        if (lastValidAtMs !== null && reading.measuredAtMs - lastValidAtMs > STALE_AFTER_MS) {
+          previous = null;
+          stableValue = null;
+          stationaryFixes = 0;
+        }
         return stableValue;
       }
 
-      let candidate = usableReportedSpeed(reading.reportedSpeedMps);
-      if (candidate === null && previous !== null) {
+      const reported = usableReportedSpeed(reading.reportedSpeedMps);
+      let derived: number | null = null;
+      let movementExceedsUncertainty = false;
+      if (previous !== null) {
         const elapsedSeconds = (reading.measuredAtMs - previous.measuredAtMs) / 1_000;
         if (elapsedSeconds >= 0.5 && elapsedSeconds <= 10) {
-          const derived = distanceMeters(previous, reading) / elapsedSeconds;
-          candidate = derived <= MAX_REASONABLE_SPEED_MPS ? derived : null;
+          const distance = distanceMeters(previous, reading);
+          const uncertainty = Math.hypot(previous.accuracy, reading.accuracy) * UNCERTAINTY_FACTOR;
+          movementExceedsUncertainty = distance > Math.max(3, uncertainty);
+          const calculated = distance / elapsedSeconds;
+          derived = movementExceedsUncertainty && calculated <= MAX_REASONABLE_SPEED_MPS ? calculated : 0;
         }
       }
       previous = reading;
+      lastValidAtMs = reading.measuredAtMs;
+
+      let candidate = reported;
+      if (reported === null) {
+        candidate = derived;
+      } else if (derived !== null) {
+        const disagreement = Math.abs(reported - derived);
+        candidate = disagreement > Math.max(3, derived * 1.5)
+          ? derived
+          : reported * 0.75 + derived * 0.25;
+      }
+      if (candidate !== null && candidate < LOW_SPEED_MPS && !movementExceedsUncertainty) candidate = 0;
       if (candidate === null) return stableValue;
 
-      const stationary = candidate < STATIONARY_THRESHOLD_MPS ? 0 : candidate;
-      samples = [...samples, stationary].slice(-WINDOW_SIZE);
-      stableValue = median(samples);
+      stationaryFixes = candidate <= STATIONARY_CANDIDATE_MPS ? stationaryFixes + 1 : 0;
+      if (stableValue === null) {
+        stableValue = candidate;
+      } else {
+        const alpha = candidate < stableValue ? 0.7 : 0.55;
+        stableValue += (candidate - stableValue) * alpha;
+      }
+      if (stationaryFixes >= STATIONARY_FIX_COUNT || (stableValue < LOW_SPEED_MPS && !movementExceedsUncertainty)) {
+        stableValue = 0;
+      }
       return stableValue;
     },
     value() {
