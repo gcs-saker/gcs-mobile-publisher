@@ -69,16 +69,20 @@ export function usePublisherController(identity: AuthenticatedAccount | null) {
     const generation = requested.state.generation;
     try {
       const nextMedia = await mediaController.capture(runtime.mediaDevices);
-      const preview = dispatch({ type: "PREVIEW_READY", generation });
-      if (!preview.accepted) {
-        mediaController.stop();
-        return;
-      }
       setMedia(nextMedia);
       store.setState({ mediaReady: true });
       mediaController.attach(videoRef.current);
       await startSensors();
       await wakeLockController.acquire(runtime.wakeLock);
+      const preview = dispatch({ type: "PREVIEW_READY", generation });
+      if (!preview.accepted) {
+        mediaController.stop(videoRef.current);
+        setMedia(null);
+        stopSensors();
+        void wakeLockController.release();
+        store.setState({ mediaReady: false });
+        return;
+      }
       store.setState({ message: "후면 카메라와 센서가 준비되었습니다." });
     } catch (reason) {
       mediaController.stop(videoRef.current);

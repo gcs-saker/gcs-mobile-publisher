@@ -16,6 +16,7 @@ export function OrientationLevel({ orientation }: OrientationLevelProps) {
   const [baseline, setBaseline] = useState<TiltBaseline>({ beta: 0, gamma: 0 });
   const compass = compassIndicator(orientation.alpha, orientation.absolute);
   const tilt = tiltIndicator(orientation, baseline);
+  const canCalibrate = orientation.beta !== null && orientation.gamma !== null;
 
   function calibrate(): void {
     setBaseline({ beta: orientation.beta ?? 0, gamma: orientation.gamma ?? 0 });
@@ -37,7 +38,9 @@ export function OrientationLevel({ orientation }: OrientationLevelProps) {
         <strong>{compass ? `${compass.heading.toFixed(0)}° ${compass.direction}` : "방위 보정 필요"}</strong>
         <span>{tilt.pitchLabel} {Math.abs(tilt.pitchDegrees).toFixed(1)}°</span>
         <span>{tilt.rollLabel} {Math.abs(tilt.rollDegrees).toFixed(1)}°</span>
-        <button className="level__calibrate" onClick={calibrate} type="button">현재 자세를 수평으로</button>
+        <button className="level__calibrate" disabled={!canCalibrate} onClick={calibrate} type="button">
+          현재 자세를 수평으로
+        </button>
       </div>
     </section>
   );

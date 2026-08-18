@@ -8,7 +8,6 @@ export interface PublisherHeaderProps {
   isOnline: boolean;
   onLogout(): Promise<void>;
   status: PublisherStatus;
-  streamId: string;
 }
 
 export function PublisherHeader({
@@ -17,14 +16,13 @@ export function PublisherHeader({
   isOnline,
   onLogout,
   status,
-  streamId,
 }: PublisherHeaderProps) {
   return (
     <header className="topbar">
       <StatusBadge status={status} />
       <div className="topbar__title">
         <strong>GCS FIELD</strong>
-        <span>{streamId || "STREAM ID"}</span>
+        <span>보안 송출 채널</span>
       </div>
       <div className="topbar__health">
         <span className={isOnline ? "network network--online" : "network network--offline"}>

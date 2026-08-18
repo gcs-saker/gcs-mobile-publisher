@@ -3,6 +3,7 @@ import { emptySnapshot } from "./sensors";
 import type { SensorSnapshot } from "./types";
 import type { BatteryPort, Clock, OrientationMonitor } from "./app/ports";
 import { createSpeedStabilizer } from "./features/sensors/domain/speedStabilizer";
+import { screenAdjustedTilt, smoothAngle, smoothLinear } from "./features/sensors/domain/orientationIndicators";
 
 export interface DeviceSensorDependencies {
   battery: BatteryPort;
@@ -34,13 +35,14 @@ export function useDeviceSensors(dependencies: DeviceSensorDependencies) {
   }, [dependencies.clock]);
 
   const onOrientation = useCallback((event: DeviceOrientationEvent) => {
+    const adjusted = screenAdjustedTilt(event.beta, event.gamma, dependencies.orientation.screenAngle);
     setSnapshot((current) => ({
       ...current,
       capturedAt: dependencies.clock.isoNow(),
       orientation: {
-        alpha: event.alpha,
-        beta: event.beta,
-        gamma: event.gamma,
+        alpha: smoothAngle(current.orientation.alpha, event.alpha),
+        beta: smoothLinear(current.orientation.beta, adjusted.beta),
+        gamma: smoothLinear(current.orientation.gamma, adjusted.gamma),
         absolute: event.absolute,
       },
     }));

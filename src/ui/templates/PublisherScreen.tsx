@@ -28,7 +28,6 @@ export function PublisherScreen({
         isOnline={controller.isOnline}
         onLogout={onLogout}
         status={controller.status}
-        streamId={controller.streamId}
       />
       <SensorDashboard snapshot={controller.snapshot} />
       <PublisherControls

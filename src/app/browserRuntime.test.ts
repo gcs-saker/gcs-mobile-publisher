@@ -11,7 +11,7 @@ function fakeRuntime(): RuntimeDependencies {
     lifecycle: { subscribeResume: () => () => undefined },
     mediaDevices: null,
     network: { online: true, subscribe: () => () => undefined },
-    orientation: { subscribe: () => () => undefined },
+    orientation: { screenAngle: 0, subscribe: () => () => undefined },
     peerConnections: { create: vi.fn() },
     random: { next: () => 0.5 },
     scheduler: {

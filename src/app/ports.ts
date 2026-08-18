@@ -30,6 +30,7 @@ export interface SessionStore {
 }
 
 export interface OrientationMonitor {
+  readonly screenAngle: number;
   subscribe(listener: (event: DeviceOrientationEvent) => void): () => void;
 }
 

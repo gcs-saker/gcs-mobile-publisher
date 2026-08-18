@@ -39,6 +39,9 @@ export function createBrowserRuntime(): RuntimeDependencies {
       },
     },
     orientation: {
+      get screenAngle() {
+        return window.screen.orientation?.angle ?? 0;
+      },
       subscribe(listener) {
         window.addEventListener("deviceorientation", listener, true);
         return () => window.removeEventListener("deviceorientation", listener, true);
