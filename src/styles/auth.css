@@ -5,7 +5,7 @@
   font-synthesis: none;
   --page-inline: clamp(12px, 4vw, 20px);
   --touch-target: 48px;
-  --publisher-max-width: 480px;
+  --publisher-max-width: 1024px;
   --color-page: #07110e;
   --color-muted: #9fb1a8;
   --color-accent: #6eea94;

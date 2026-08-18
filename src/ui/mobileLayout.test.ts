@@ -6,8 +6,8 @@ const styles = ["auth.css", "publisher.css"]
   .join("\n");
 
 describe("Android mobile layout contract", () => {
-  it("supports the 360px through 480px publisher width range", () => {
-    expect(styles).toContain("--publisher-max-width: 480px");
+  it("supports the 320px through 1024px phone and tablet range", () => {
+    expect(styles).toContain("--publisher-max-width: 1024px");
     expect(styles).toMatch(/min-width:\s*320px/);
     expect(styles).toMatch(/min\(100%,\s*var\(--publisher-max-width\)\)/);
   });
@@ -27,6 +27,12 @@ describe("Android mobile layout contract", () => {
   it("provides a compact layout for 360x640-class screens", () => {
     expect(styles).toContain("@media (max-height: 720px) and (orientation: portrait)");
     expect(styles).toMatch(/\.control-sheet\s*\{[\s\S]*?max-height:\s*46dvh/);
+  });
+
+  it("provides portrait and landscape tablet layouts", () => {
+    expect(styles).toContain("@media (min-width: 600px)");
+    expect(styles).toContain("@media (min-width: 700px) and (orientation: landscape)");
+    expect(styles).not.toContain("visibility: hidden");
   });
 
   it("keeps header content stable on narrow screens", () => {

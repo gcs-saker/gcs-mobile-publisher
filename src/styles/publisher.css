@@ -1,6 +1,6 @@
 .app {
   position: relative;
-  width: 100%;
+  width: min(100%, var(--publisher-max-width));
   min-height: 100svh;
   height: 100dvh;
   overflow: hidden;
@@ -11,18 +11,21 @@
 
 .camera {
   position: fixed;
-  inset: 0;
-  width: 100%;
+  inset: 0 auto 0 50%;
+  width: min(100%, var(--publisher-max-width));
   height: 100%;
   object-fit: cover;
   background: #050a08;
+  transform: translateX(-50%);
 }
 
 .shade {
   position: fixed;
-  inset: 0;
+  inset: 0 auto 0 50%;
+  width: min(100%, var(--publisher-max-width));
   pointer-events: none;
-  background: linear-gradient(180deg, rgba(2, 8, 6, .78), transparent 24%, transparent 58%, rgba(2, 8, 6, .94) 100%);
+  background: linear-gradient(180deg, rgba(2, 8, 6, .78), transparent 24%, transparent 58%, rgba(2, 8, 6,.94) 100%);
+  transform: translateX(-50%);
 }
 
 .topbar {
@@ -55,6 +58,7 @@
 .topbar__title strong { font-size: 13px; letter-spacing: .12em; }
 .topbar__title span {
   overflow: hidden;
+  margin: 0 auto;
   color: #a9b8b1;
   font-size: 11px;
   text-overflow: ellipsis;
@@ -266,9 +270,21 @@
 .button--icon { color: #dce9e1; background: #17271f; font-size: 12px; }
 .button:disabled { opacity: .42; }
 
-@media (min-width: 700px) {
-  .app { width: min(100%, var(--publisher-max-width)); margin: 0 auto; box-shadow: 0 0 80px #000; }
-  .camera, .shade { left: 50%; width: min(100%, var(--publisher-max-width)); transform: translateX(-50%); }
+@media (min-width: 600px) {
+  .app { box-shadow: 0 0 80px #000; }
+  .topbar { padding-inline: clamp(20px, 4vw, 36px); }
+  .sensor-dashboard {
+    position: relative;
+    z-index: 2;
+    display: grid;
+    grid-template-columns: minmax(260px, .85fr) minmax(320px, 1.15fr);
+    gap: clamp(24px, 5vw, 56px);
+    align-items: center;
+    margin: clamp(150px, 25dvh, 260px) clamp(24px, 5vw, 52px) 0;
+  }
+  .sensor-dashboard .level,
+  .sensor-dashboard .telemetry { margin: 0; }
+  .control-sheet { padding-inline: clamp(24px, 5vw, 52px); }
 }
 
 @media (max-height: 720px) and (orientation: portrait) {
@@ -291,26 +307,24 @@
   }
 }
 
-@media (orientation: landscape) and (max-height: 600px) {
-  .app > :not(.landscape-notice) {
-    visibility: hidden;
+@media (min-width: 700px) and (orientation: landscape) {
+  .sensor-dashboard {
+    position: absolute;
+    right: clamp(380px, 40vw, 430px);
+    bottom: clamp(24px, 6dvh, 56px);
+    left: clamp(24px, 4vw, 44px);
+    grid-template-columns: minmax(220px, .8fr) minmax(260px, 1.2fr);
+    gap: clamp(18px, 3vw, 36px);
+    margin: 0;
   }
-  .landscape-notice {
-    position: fixed;
-    z-index: 20;
-    inset: 0;
-    display: grid;
-    place-content: center;
-    gap: 8px;
-    padding: 24px;
-    text-align: center;
-    background: var(--color-page);
-  }
-  .landscape-notice strong {
-    font-size: 20px;
-  }
-  .landscape-notice span {
-    color: var(--color-muted);
-    font-size: 13px;
+  .control-sheet {
+    right: clamp(18px, 3vw, 32px);
+    bottom: clamp(18px, 3vw, 32px);
+    left: auto;
+    width: min(360px, 38vw);
+    max-height: calc(100dvh - 100px);
+    border: 1px solid rgba(255,255,255,.14);
+    border-radius: 22px;
+    padding: 18px;
   }
 }

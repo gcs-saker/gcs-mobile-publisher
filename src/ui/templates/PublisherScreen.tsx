@@ -16,10 +16,6 @@ export function PublisherScreen({
 }: PublisherScreenProps) {
   return (
     <main className="app">
-      <aside className="landscape-notice" role="status">
-        <strong>휴대폰을 세로로 돌려주세요</strong>
-        <span>안정적인 송출 조작을 위해 세로 화면을 사용합니다.</span>
-      </aside>
       <video ref={controller.videoRef} className="camera" autoPlay muted playsInline />
       <div className="shade" aria-hidden="true" />
       <PublisherHeader
