@@ -111,7 +111,7 @@ export function usePublisherRuntimeEffects(options: PublisherRuntimeEffectsOptio
         try {
           await gateway.sendTelemetry(buildTelemetryPayload(
             store.getSnapshot().streamId, startedAtRef.current, runtimeCoordinator.sensorSnapshot,
-            runtime.clock, runtime.userAgent,
+            store.getSnapshot().coordinatePrecision, runtime.clock, runtime.userAgent,
           ), identity);
         } catch (reason: unknown) {
           store.setState({ message: reason instanceof Error ? reason.message : "센서 전송 오류" });

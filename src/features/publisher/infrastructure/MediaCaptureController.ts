@@ -22,6 +22,10 @@ function videoOnlyConstraints(facingMode: CameraFacingMode): MediaStreamConstrai
   return { video: videoConstraints(facingMode), audio: false };
 }
 
+function stopTracks(tracks: MediaStreamTrack[]): void {
+  tracks.forEach((track) => track.stop());
+}
+
 export class MediaCaptureController {
   private activeStream: MediaStream | null = null;
   private generation = 0;
@@ -50,26 +54,26 @@ export class MediaCaptureController {
   ): Promise<void> {
     if (!devices || !this.activeStream) throw new Error("카메라 전환 준비가 되지 않았습니다.");
     const generation = ++this.generation;
+    const previousTracks = this.activeStream.getVideoTracks();
+    stopTracks(previousTracks);
     const candidate = await devices.getUserMedia(videoOnlyConstraints(facingMode));
     const nextTrack = candidate.getVideoTracks()[0];
     if (!nextTrack) {
-      candidate.getTracks().forEach((track) => track.stop());
+      stopTracks(candidate.getTracks());
       throw new Error("선택한 카메라의 영상 트랙을 가져오지 못했습니다.");
     }
     if (generation !== this.generation || !this.activeStream) {
-      candidate.getTracks().forEach((track) => track.stop());
+      stopTracks(candidate.getTracks());
       throw new DOMException("Camera switch was cancelled", "AbortError");
     }
     try {
       await replaceTrack(nextTrack);
     } catch (error: unknown) {
-      candidate.getTracks().forEach((track) => track.stop());
+      stopTracks(candidate.getTracks());
       throw error;
     }
-    const previousTracks = this.activeStream.getVideoTracks();
     previousTracks.forEach((track) => {
       this.activeStream?.removeTrack(track);
-      track.stop();
     });
     this.activeStream.addTrack(nextTrack);
   }

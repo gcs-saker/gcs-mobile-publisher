@@ -215,6 +215,8 @@
   font: inherit;
   font-weight: 800;
 }
+
+.telemetry .telemetry__wide { grid-column: 1 / -1; }
 .runtime-strip select:disabled { opacity: .5; }
 .publisher-settings { flex-basis: 100%; }
 .publisher-settings summary {

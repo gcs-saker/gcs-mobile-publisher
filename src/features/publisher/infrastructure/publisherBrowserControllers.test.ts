@@ -55,7 +55,7 @@ describe("publisher browser resource controllers", () => {
     }));
   });
 
-  it("switches the live video track only after sender replacement succeeds", async () => {
+  it("releases the active mobile camera before requesting its replacement", async () => {
     const stopPrevious = vi.fn();
     const stopNext = vi.fn();
     const previousTrack = { kind: "video", stop: stopPrevious } as unknown as MediaStreamTrack;
@@ -73,9 +73,13 @@ describe("publisher browser resource controllers", () => {
       getTracks: () => [nextTrack],
       getVideoTracks: () => [nextTrack],
     } as unknown as MediaStream;
-    const devices = { getUserMedia: vi.fn()
+    const getUserMedia = vi.fn()
       .mockResolvedValueOnce(activeStream)
-      .mockResolvedValueOnce(candidate) } as unknown as MediaDevices;
+      .mockImplementationOnce(async () => {
+        expect(stopPrevious).toHaveBeenCalledOnce();
+        return candidate;
+      });
+    const devices = { getUserMedia } as unknown as MediaDevices;
     const replaceTrack = vi.fn().mockResolvedValue(undefined);
     const controller = new MediaCaptureController();
     await controller.capture(devices, "environment");
@@ -89,7 +93,7 @@ describe("publisher browser resource controllers", () => {
     expect(stopNext).not.toHaveBeenCalled();
   });
 
-  it("keeps the current camera when live track replacement fails", async () => {
+  it("stops the rejected candidate when live track replacement fails", async () => {
     const stopPrevious = vi.fn();
     const stopNext = vi.fn();
     const previousTrack = { kind: "video", stop: stopPrevious } as unknown as MediaStreamTrack;
@@ -110,7 +114,7 @@ describe("publisher browser resource controllers", () => {
     })).rejects.toThrow("replace failed");
 
     expect(stopNext).toHaveBeenCalledOnce();
-    expect(stopPrevious).not.toHaveBeenCalled();
+    expect(stopPrevious).toHaveBeenCalledOnce();
   });
 
   it("releases connection and publish session exactly once", async () => {
