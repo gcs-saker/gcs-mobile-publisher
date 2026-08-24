@@ -9,7 +9,7 @@ const initialState: PublisherState = {
   mediaReady: false,
   message: "ready",
   muted: false,
-  quality: "high",
+  quality: "medium",
   status: "idle",
   streamId: "",
 };

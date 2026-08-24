@@ -42,7 +42,7 @@ export function usePublisherController(identity: AuthenticatedAccount | null) {
   reconnectRef.current ??= new ReconnectScheduler(
     runtime.scheduler,
     new ReconnectPolicy({
-      baseDelayMs: 1_000, jitterRatio: 0.2, maxAttempts: 5, maxDelayMs: 10_000,
+      baseDelayMs: 1_000, jitterRatio: 0.2, maxAttempts: 60, maxDelayMs: 15_000,
     }, runtime.random),
   );
   const reconnectScheduler = reconnectRef.current;
@@ -57,7 +57,7 @@ export function usePublisherController(identity: AuthenticatedAccount | null) {
       if (runtime.network.online && mediaController.stream) void publishRef.current();
     });
     if (result.outcome === "scheduled") {
-      store.setState({ message: `네트워크 연결을 복구합니다. ${result.schedule.attempt}/5` });
+      store.setState({ message: `네트워크 연결을 복구합니다. ${result.schedule.attempt}/60` });
     } else if (result.outcome === "exhausted") {
       const failure = dispatch({ type: "FAILED", generation });
       if (failure.accepted) store.setState({ message: "자동 재연결 횟수를 초과했습니다. 다시 준비해 주세요." });

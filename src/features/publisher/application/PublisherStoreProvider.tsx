@@ -40,7 +40,7 @@ export function PublisherStoreProvider({ children, gateway, store }: PublisherSt
       mediaReady: false,
       message: "송출 준비를 눌러 카메라와 센서를 시작하세요.",
       muted: false,
-      quality: "high",
+      quality: "medium",
       status: "idle",
       streamId: "",
     });
