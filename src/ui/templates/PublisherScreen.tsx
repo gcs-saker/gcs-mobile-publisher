@@ -17,6 +17,10 @@ export function PublisherScreen({
   return (
     <main className="app">
       <video ref={controller.videoRef} className="camera" autoPlay muted playsInline />
+      <div className="publisher-talkback" aria-live="polite">
+        <span>{controller.talkbackStatus}</span>
+        <audio ref={controller.talkbackAudioRef} autoPlay controls />
+      </div>
       <div className="shade" aria-hidden="true" />
       <PublisherHeader
         battery={controller.snapshot.battery}

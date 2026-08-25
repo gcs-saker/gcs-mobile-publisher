@@ -16,6 +16,8 @@ import { WakeLockController } from "../infrastructure/WakeLockController";
 import { usePublisherRuntimeEffects } from "./usePublisherRuntimeEffects";
 import { usePublisherTransition } from "./usePublisherTransition";
 import type { CameraFacingMode, CoordinatePrecision } from "../domain/publisherSettings";
+import { useRemoteCameraCommand } from "./useRemoteCameraCommand";
+import { useTalkbackReceiver } from "./useTalkbackReceiver";
 
 export function usePublisherController(identity: AuthenticatedAccount | null) {
   const runtime = useRuntime();
@@ -198,6 +200,19 @@ export function usePublisherController(identity: AuthenticatedAccount | null) {
     mediaController.setMuted(nextMuted);
     store.setState({ muted: nextMuted });
   }, [mediaController, store]);
+  const reportCameraControlError = useCallback((controlMessage: string) => {
+    store.setState({ message: controlMessage });
+  }, [store]);
+
+  useRemoteCameraCommand({
+    active: status === "live",
+    identity,
+    onError: reportCameraControlError,
+    onFacingMode: setCameraFacingMode,
+    runtime,
+    streamId,
+  });
+  const talkback = useTalkbackReceiver({ active: status === "live", identity, runtime, streamId });
 
   useEffect(() => { store.setState({ quality: adaptiveQuality }); }, [adaptiveQuality, store]);
   useEffect(() => { publishRef.current = publish; }, [publish]);
@@ -211,6 +226,7 @@ export function usePublisherController(identity: AuthenticatedAccount | null) {
   return {
     cameraFacingMode, canInstall: pwa.canInstall, coordinatePrecision, install: pwa.install, isInstalled: pwa.isInstalled,
     isOnline, mediaReady, message, muted, prepare, publish, quality, sensorError,
-    setCameraFacingMode, setCoordinatePrecision, snapshot, status, stop, streamId, toggleMute, videoRef,
+    setCameraFacingMode, setCoordinatePrecision, snapshot, status, stop, streamId,
+    talkbackAudioRef: talkback.audioRef, talkbackStatus: talkback.status, toggleMute, videoRef,
   } as const;
 }

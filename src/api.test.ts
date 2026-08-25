@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
-import { createPublishSession, endPublishSession, renewPublishSession, sendTelemetry } from "./api";
+import { createPublishSession, endPublishSession, fetchCameraControlCommand,
+  fetchTalkbackPlaybackUrl, renewPublishSession, sendTelemetry } from "./api";
 import { emptySnapshot } from "./sensors";
 
 const identity = {
@@ -85,5 +86,20 @@ describe("account publish session API", () => {
     const body = JSON.parse(String(fetcher.mock.calls[0]?.[1]?.body)) as Record<string, unknown>;
     expect(body).toMatchObject({ epochTime: 3, uuid: "raw.account-a.front", velocity: 4.5 });
     expect(body).not.toHaveProperty("location");
+  });
+
+  it("reads remote camera and talkback commands with the account bearer token", async () => {
+    const fetcher = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(Response.json({ facingMode: "rear", revision: 4 }))
+      .mockResolvedValueOnce(Response.json({ playbackUrls: { webrtc: "/webrtc/talkback/whep?token=short" } }));
+
+    await expect(fetchCameraControlCommand(identity, "raw.mobile.front", fetcher))
+      .resolves.toEqual({ facingMode: "environment", revision: 4 });
+    await expect(fetchTalkbackPlaybackUrl(identity, "raw.mobile.front", fetcher))
+      .resolves.toBe("/webrtc/talkback/whep?token=short");
+    expect(fetcher).toHaveBeenCalledWith(
+      "/media-control/api/v1/streams/raw.mobile.front/camera-control",
+      expect.objectContaining({ headers: expect.objectContaining({ Authorization: "Bearer login-access-token" }) }),
+    );
   });
 });

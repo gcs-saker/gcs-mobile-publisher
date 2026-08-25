@@ -129,3 +129,45 @@ export async function sendTelemetry(
   });
   if (!response.ok) throw new Error(`텔레메트리 전송 실패 (${response.status})`);
 }
+
+export interface CameraControlCommand {
+  facingMode: "environment" | "user" | "";
+  revision: number;
+}
+
+export async function fetchCameraControlCommand(
+  identity: AuthenticatedAccount,
+  streamId: string,
+  fetcher: typeof fetch,
+): Promise<CameraControlCommand> {
+  const base = config.streamApiBaseUrl.replace(/\/$/, "");
+  const response = await fetcher(`${base}/api/v1/streams/${encodeURIComponent(streamId)}/camera-control`, {
+    headers: { Accept: "application/json", ...accountHeaders(identity) },
+  });
+  if (!response.ok) throw new Error(`카메라 전환 상태 확인 실패 (${response.status})`);
+  const payload: unknown = await response.json();
+  if (!isRecord(payload) || typeof payload["revision"] !== "number") {
+    throw new TypeError("Invalid camera control response");
+  }
+  const facingMode = payload["facingMode"] === "front" ? "user"
+    : payload["facingMode"] === "rear" ? "environment" : "";
+  return { facingMode, revision: payload["revision"] };
+}
+
+export async function fetchTalkbackPlaybackUrl(
+  identity: AuthenticatedAccount,
+  streamId: string,
+  fetcher: typeof fetch,
+): Promise<string> {
+  const base = config.streamApiBaseUrl.replace(/\/$/, "");
+  const response = await fetcher(`${base}/api/v1/streams/${encodeURIComponent(streamId)}/talkback-playback`, {
+    headers: { Accept: "application/json", ...accountHeaders(identity) },
+  });
+  if (!response.ok) throw new Error(`관제 음성 세션 생성 실패 (${response.status})`);
+  const payload: unknown = await response.json();
+  const playbackUrls = isRecord(payload) ? payload["playbackUrls"] : null;
+  if (!isRecord(playbackUrls) || typeof playbackUrls["webrtc"] !== "string") {
+    throw new TypeError("Invalid talkback playback response");
+  }
+  return playbackUrls["webrtc"];
+}
