@@ -76,7 +76,7 @@ describe("publisher browser resource controllers", () => {
     const getUserMedia = vi.fn()
       .mockResolvedValueOnce(activeStream)
       .mockImplementationOnce(async () => {
-        expect(stopPrevious).toHaveBeenCalledOnce();
+        expect(stopPrevious).not.toHaveBeenCalled();
         return candidate;
       });
     const devices = { getUserMedia } as unknown as MediaDevices;
@@ -114,7 +114,26 @@ describe("publisher browser resource controllers", () => {
     })).rejects.toThrow("replace failed");
 
     expect(stopNext).toHaveBeenCalledOnce();
-    expect(stopPrevious).toHaveBeenCalledOnce();
+    expect(stopPrevious).not.toHaveBeenCalled();
+  });
+
+  it("switches facing mode in place without another permission request when supported", async () => {
+    const applyConstraints = vi.fn().mockResolvedValue(undefined);
+    const activeTrack = { applyConstraints, kind: "video", stop: vi.fn() } as unknown as MediaStreamTrack;
+    const activeStream = {
+      getAudioTracks: () => [], getTracks: () => [activeTrack], getVideoTracks: () => [activeTrack],
+    } as unknown as MediaStream;
+    const getUserMedia = vi.fn().mockResolvedValueOnce(activeStream);
+    const devices = { getUserMedia } as unknown as MediaDevices;
+    const replaceTrack = vi.fn().mockResolvedValue(undefined);
+    const controller = new MediaCaptureController();
+    await controller.capture(devices, "environment");
+
+    await controller.switchCamera(devices, "user", replaceTrack);
+
+    expect(applyConstraints).toHaveBeenCalledWith(expect.objectContaining({ facingMode: { ideal: "user" } }));
+    expect(getUserMedia).toHaveBeenCalledTimes(1);
+    expect(replaceTrack).not.toHaveBeenCalled();
   });
 
   it("releases connection and publish session exactly once", async () => {

@@ -95,7 +95,7 @@ export function usePublisherController(identity: AuthenticatedAccount | null) {
       store.setState({ mediaReady: false });
       const failure = dispatch({ type: "FAILED", generation });
       if (failure.accepted) store.setState({
-        message: reason instanceof Error ? reason.message : "장치 권한을 받을 수 없습니다.",
+        message: mediaAccessErrorMessage(reason, "카메라와 마이크"),
       });
     }
   }, [cameraFacingMode, dispatch, mediaController, runtime, startSensors, stopSensors, store, wakeLockController]);
@@ -119,7 +119,7 @@ export function usePublisherController(identity: AuthenticatedAccount | null) {
       mediaController.attach(videoRef.current);
       store.setState({ cameraFacingMode: value, message: "카메라를 전환했습니다." });
     } catch (reason: unknown) {
-      store.setState({ message: reason instanceof Error ? reason.message : "카메라 전환에 실패했습니다." });
+      store.setState({ message: mediaAccessErrorMessage(reason, "카메라") });
     }
   }, [mediaController, peerConnection, runtime.mediaDevices, store]);
 
@@ -229,4 +229,17 @@ export function usePublisherController(identity: AuthenticatedAccount | null) {
     setCameraFacingMode, setCoordinatePrecision, snapshot, status, stop, streamId,
     talkbackAudioRef: talkback.audioRef, talkbackStatus: talkback.status, toggleMute, videoRef,
   } as const;
+}
+
+function mediaAccessErrorMessage(reason: unknown, target: "카메라" | "카메라와 마이크"): string {
+  if (reason instanceof DOMException && reason.name === "NotAllowedError") {
+    return `${target} 권한이 차단되었습니다. 브라우저 사이트 설정에서 권한을 허용한 뒤 다시 시도하세요.`;
+  }
+  if (reason instanceof DOMException && reason.name === "NotFoundError") {
+    return `${target} 장치를 찾을 수 없습니다.`;
+  }
+  if (reason instanceof DOMException && reason.name === "NotReadableError") {
+    return `${target}를 다른 앱에서 사용 중입니다. 다른 앱을 닫고 다시 시도하세요.`;
+  }
+  return reason instanceof Error ? reason.message : `${target} 접근에 실패했습니다.`;
 }

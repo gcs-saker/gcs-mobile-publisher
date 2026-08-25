@@ -55,7 +55,15 @@ export class MediaCaptureController {
     if (!devices || !this.activeStream) throw new Error("카메라 전환 준비가 되지 않았습니다.");
     const generation = ++this.generation;
     const previousTracks = this.activeStream.getVideoTracks();
-    stopTracks(previousTracks);
+    const activeTrack = previousTracks[0];
+    if (activeTrack?.applyConstraints) {
+      try {
+        await activeTrack.applyConstraints(videoConstraints(facingMode));
+        return;
+      } catch {
+        // Some mobile browsers cannot change facing mode on an active track; use atomic replacement below.
+      }
+    }
     const candidate = await devices.getUserMedia(videoOnlyConstraints(facingMode));
     const nextTrack = candidate.getVideoTracks()[0];
     if (!nextTrack) {
@@ -72,6 +80,7 @@ export class MediaCaptureController {
       stopTracks(candidate.getTracks());
       throw error;
     }
+    stopTracks(previousTracks);
     previousTracks.forEach((track) => {
       this.activeStream?.removeTrack(track);
     });
