@@ -2,15 +2,20 @@ import type { VideoQuality } from "../../quality";
 import type { PublisherStatus } from "../../types";
 import { ActionButton } from "../atoms/ActionButton";
 import { RuntimeStrip } from "../molecules/RuntimeStrip";
-import { publisherStatusView } from "../publisherViewModel";
+import { isPublisherMediaControlReady, publisherStatusView } from "../publisherViewModel";
+import type { CameraFacingMode, CoordinatePrecision } from "../../features/publisher/domain/publisherSettings";
 
 export interface PublisherControlsProps {
+  cameraFacingMode: CameraFacingMode;
   canInstall: boolean;
+  coordinatePrecision: CoordinatePrecision;
   isInstalled: boolean;
   mediaReady: boolean;
   message: string;
   muted: boolean;
   onInstall(): Promise<void>;
+  onCameraFacingModeChange(value: CameraFacingMode): Promise<void>;
+  onCoordinatePrecisionChange(value: CoordinatePrecision): void;
   onPrepare(): Promise<void>;
   onPublish(): Promise<void>;
   onStop(): void;
@@ -22,6 +27,7 @@ export interface PublisherControlsProps {
 
 export function PublisherControls(props: PublisherControlsProps) {
   const view = publisherStatusView(props.status);
+  const mediaControlReady = isPublisherMediaControlReady(props.status, props.mediaReady);
   function runPrimaryAction(): void {
     if (view.primaryAction.action === "prepare") void props.onPrepare();
     else if (view.primaryAction.action === "publish") void props.onPublish();
@@ -30,6 +36,10 @@ export function PublisherControls(props: PublisherControlsProps) {
   return (
     <section className="control-sheet" aria-label="송출 제어">
       <RuntimeStrip canInstall={props.canInstall} isInstalled={props.isInstalled}
+        cameraFacingMode={props.cameraFacingMode} coordinatePrecision={props.coordinatePrecision}
+        disabled={!(["idle", "error", "live"] as PublisherStatus[]).includes(props.status)}
+        onCameraFacingModeChange={props.onCameraFacingModeChange}
+        onCoordinatePrecisionChange={props.onCoordinatePrecisionChange}
         onInstall={props.onInstall} quality={props.quality} />
       <p className={props.status === "error" || props.sensorError ? "message message--error" : "message"}
         role={props.status === "error" || props.sensorError ? "alert" : "status"}>
@@ -39,7 +49,7 @@ export function PublisherControls(props: PublisherControlsProps) {
         <ActionButton onClick={runPrimaryAction} tone={view.primaryAction.tone}>
           {view.primaryAction.label}
         </ActionButton>
-        <ActionButton disabled={!props.mediaReady} onClick={props.onToggleMute} tone="secondary">
+        <ActionButton disabled={!mediaControlReady} onClick={props.onToggleMute} tone="secondary">
           {props.muted ? "마이크 켜기" : "음소거"}
         </ActionButton>
       </div>

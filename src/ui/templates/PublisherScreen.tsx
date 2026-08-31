@@ -16,11 +16,13 @@ export function PublisherScreen({
 }: PublisherScreenProps) {
   return (
     <main className="app">
-      <aside className="landscape-notice" role="status">
-        <strong>휴대폰을 세로로 돌려주세요</strong>
-        <span>안정적인 송출 조작을 위해 세로 화면을 사용합니다.</span>
-      </aside>
       <video ref={controller.videoRef} className="camera" autoPlay muted playsInline />
+      <audio ref={controller.talkbackAudioRef} autoPlay className="publisher-talkback__audio" />
+      {controller.talkbackStatus === "관제 음성 수신 중" ? (
+        <div className="publisher-talkback" aria-live="polite">
+          <span>{controller.talkbackStatus}</span>
+        </div>
+      ) : null}
       <div className="shade" aria-hidden="true" />
       <PublisherHeader
         battery={controller.snapshot.battery}
@@ -28,16 +30,19 @@ export function PublisherScreen({
         isOnline={controller.isOnline}
         onLogout={onLogout}
         status={controller.status}
-        streamId={controller.streamId}
       />
-      <SensorDashboard snapshot={controller.snapshot} />
+      <SensorDashboard coordinatePrecision={controller.coordinatePrecision} snapshot={controller.snapshot} />
       <PublisherControls
         canInstall={controller.canInstall}
         isInstalled={controller.isInstalled}
+        cameraFacingMode={controller.cameraFacingMode}
+        coordinatePrecision={controller.coordinatePrecision}
         mediaReady={controller.mediaReady}
         message={controller.message}
         muted={controller.muted}
         onInstall={controller.install}
+        onCameraFacingModeChange={controller.setCameraFacingMode}
+        onCoordinatePrecisionChange={controller.setCoordinatePrecision}
         onPrepare={controller.prepare}
         onPublish={controller.publish}
         onStop={controller.stop}

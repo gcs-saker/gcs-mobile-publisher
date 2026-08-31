@@ -1,323 +1,245 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRuntime } from "../../../app/RuntimeProvider";
-import type { AuthenticatedDevice } from "../../auth/contracts/authentication";
-import { buildTelemetryPayload } from "../../../sensors";
 import { useAdaptiveQuality } from "../../../useAdaptiveQuality";
 import { useDeviceSensors } from "../../../useDeviceSensors";
 import { usePwaInstall } from "../../../usePwaInstall";
 import { createWhipSession } from "../../../whip";
-import {
-  usePublisherStore,
-  usePublisherStoreApi,
-  usePublisherGateway,
-} from "../application/PublisherStoreProvider";
+import type { AuthenticatedAccount } from "../../auth/contracts/authentication";
+import { PublisherConnectionCoordinator } from "../application/PublisherConnectionCoordinator";
 import { ReconnectScheduler } from "../application/ReconnectScheduler";
-import { ReconnectPolicy } from "../domain/reconnectPolicy";
 import {
-  transitionPublisher,
-  type PublisherEvent,
-  type PublisherTransition,
-} from "../domain/publisherMachine";
-import type { PublishSession } from "../../../types";
+  usePublisherGateway, usePublisherStore, usePublisherStoreApi,
+} from "../application/PublisherStoreProvider";
+import { ReconnectPolicy } from "../domain/reconnectPolicy";
+import { MediaCaptureController } from "../infrastructure/MediaCaptureController";
+import { WakeLockController } from "../infrastructure/WakeLockController";
+import { usePublisherRuntimeEffects } from "./usePublisherRuntimeEffects";
+import { usePublisherTransition } from "./usePublisherTransition";
+import type { CameraFacingMode, CoordinatePrecision } from "../domain/publisherSettings";
+import { useRemoteCameraCommand } from "./useRemoteCameraCommand";
+import { useTalkbackReceiver } from "./useTalkbackReceiver";
 
-export function usePublisherController(identity: AuthenticatedDevice | null) {
+export function usePublisherController(identity: AuthenticatedAccount | null) {
   const runtime = useRuntime();
   const gateway = usePublisherGateway();
   const store = usePublisherStoreApi();
   const state = usePublisherStore((snapshot) => snapshot);
-  const { isOnline, mediaReady, message, muted, quality, status, streamId } = state;
+  const { cameraFacingMode, coordinatePrecision, isOnline, mediaReady, message, muted, quality, status, streamId } = state;
   const [media, setMedia] = useState<MediaStream | null>(null);
   const [peerConnection, setPeerConnection] = useState<RTCPeerConnection | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
-  const mediaRef = useRef<MediaStream | null>(null);
-  const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
-  const publishSessionRef = useRef<PublishSession | null>(null);
-  const renewalTimerRef = useRef<number | null>(null);
-  const wakeLockRef = useRef<WakeLockSentinel | null>(null);
-  const publishingRef = useRef(false);
   const publishRef = useRef<() => Promise<void>>(async () => undefined);
+  const renewalTimerRef = useRef<number | null>(null);
   const startedAtRef = useRef(0);
-  const reconnectSchedulerRef = useRef<ReconnectScheduler | null>(null);
-  reconnectSchedulerRef.current ??= new ReconnectScheduler(
+  const mediaControllerRef = useRef<MediaCaptureController | null>(null);
+  mediaControllerRef.current ??= new MediaCaptureController();
+  const mediaController = mediaControllerRef.current;
+  const connectionRef = useRef<PublisherConnectionCoordinator | null>(null);
+  connectionRef.current ??= new PublisherConnectionCoordinator();
+  const connectionCoordinator = connectionRef.current;
+  const wakeLockRef = useRef<WakeLockController | null>(null);
+  wakeLockRef.current ??= new WakeLockController();
+  const wakeLockController = wakeLockRef.current;
+  const reconnectRef = useRef<ReconnectScheduler | null>(null);
+  reconnectRef.current ??= new ReconnectScheduler(
     runtime.scheduler,
-    new ReconnectPolicy(
-      {
-        baseDelayMs: 1_000,
-        jitterRatio: 0.2,
-        maxAttempts: 5,
-        maxDelayMs: 10_000,
-      },
-      runtime.random,
-    ),
+    new ReconnectPolicy({
+      baseDelayMs: 1_000, jitterRatio: 0.2, maxAttempts: 60, maxDelayMs: 15_000,
+    }, runtime.random),
   );
-  const reconnectScheduler = reconnectSchedulerRef.current;
-  const {
-    snapshot,
-    error: sensorError,
-    start: startSensors,
-    stop: stopSensors,
-  } = useDeviceSensors(runtime);
+  const reconnectScheduler = reconnectRef.current;
+  const { snapshot, error: sensorError, start: startSensors, stop: stopSensors } = useDeviceSensors(runtime);
   const adaptiveQuality = useAdaptiveQuality(peerConnection, media, status === "live", runtime.scheduler);
   const pwa = usePwaInstall();
-  const dispatch = useCallback((event: PublisherEvent): PublisherTransition => {
-    const current = store.getSnapshot();
-    const result = transitionPublisher(
-      { generation: current.generation, status: current.status },
-      event,
-    );
-    if (result.accepted) {
-      store.setState({
-        generation: result.state.generation,
-        status: result.state.status,
-      });
-    }
-    return result;
-  }, [store]);
+  const dispatch = usePublisherTransition(store);
 
-  const scheduleReconnect = useCallback((activeGeneration: number) => {
-    if (!runtime.network.online || !mediaRef.current) return;
+  const scheduleReconnect = useCallback((generation: number) => {
+    if (!runtime.network.online || !mediaController.stream) return;
     const result = reconnectScheduler.schedule(() => {
-      if (runtime.network.online && mediaRef.current) void publishRef.current();
+      if (runtime.network.online && mediaController.stream) void publishRef.current();
     });
     if (result.outcome === "scheduled") {
-      store.setState({
-        message: `네트워크 연결을 복구합니다. ${result.schedule.attempt}/5`,
-      });
-      return;
+      store.setState({ message: `네트워크 연결을 복구합니다. ${result.schedule.attempt}/60` });
+    } else if (result.outcome === "exhausted") {
+      const failure = dispatch({ type: "FAILED", generation });
+      if (failure.accepted) store.setState({ message: "자동 재연결 횟수를 초과했습니다. 다시 준비해 주세요." });
     }
-    if (result.outcome === "exhausted") {
-      const failure = dispatch({ type: "FAILED", generation: activeGeneration });
-      if (failure.accepted) {
-        store.setState({ message: "자동 재연결 횟수를 초과했습니다. 다시 준비해 주세요." });
-      }
-    }
-  }, [dispatch, reconnectScheduler, runtime.network, store]);
+  }, [dispatch, mediaController, reconnectScheduler, runtime.network, store]);
 
   const prepare = useCallback(async () => {
     const requested = dispatch({ type: "PREPARE_REQUESTED" });
     if (!requested.accepted) return;
-    const activeGeneration = requested.state.generation;
+    const generation = requested.state.generation;
     try {
-      mediaRef.current?.getTracks().forEach((track) => track.stop());
-      if (!runtime.mediaDevices) throw new Error("이 기기에서는 카메라를 사용할 수 없습니다.");
-      const nextMedia = await runtime.mediaDevices.getUserMedia({
-        video: {
-          facingMode: { ideal: "environment" },
-          width: { ideal: 1280 },
-          height: { ideal: 720 },
-          frameRate: { ideal: 24, max: 30 },
-        },
-        audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true,
-        },
-      });
-      const preview = dispatch({ type: "PREVIEW_READY", generation: activeGeneration });
-      if (!preview.accepted) {
-        nextMedia.getTracks().forEach((track) => track.stop());
-        return;
-      }
-      mediaRef.current = nextMedia;
+      const nextMedia = await mediaController.capture(runtime.mediaDevices, cameraFacingMode);
       setMedia(nextMedia);
       store.setState({ mediaReady: true });
-      if (videoRef.current) videoRef.current.srcObject = nextMedia;
+      mediaController.attach(videoRef.current);
       await startSensors();
-      wakeLockRef.current = await runtime.wakeLock.request();
-      store.setState({ message: "후면 카메라와 센서가 준비됐습니다." });
+      await wakeLockController.acquire(runtime.wakeLock);
+      const preview = dispatch({ type: "PREVIEW_READY", generation });
+      if (!preview.accepted) {
+        mediaController.stop(videoRef.current);
+        setMedia(null);
+        stopSensors();
+        void wakeLockController.release();
+        store.setState({ mediaReady: false });
+        return;
+      }
+      store.setState({ message: "후면 카메라와 센서가 준비되었습니다." });
     } catch (reason) {
-      const failure = dispatch({ type: "FAILED", generation: activeGeneration });
-      if (!failure.accepted) return;
-      store.setState({
-        message: reason instanceof Error ? reason.message : "기기 권한을 받을 수 없습니다.",
+      mediaController.stop(videoRef.current);
+      setMedia(null);
+      stopSensors();
+      void wakeLockController.release();
+      store.setState({ mediaReady: false });
+      const failure = dispatch({ type: "FAILED", generation });
+      if (failure.accepted) store.setState({
+        message: mediaAccessErrorMessage(reason, "카메라와 마이크"),
       });
     }
-  }, [dispatch, runtime, startSensors, store]);
+  }, [cameraFacingMode, dispatch, mediaController, runtime, startSensors, stopSensors, store, wakeLockController]);
+
+  const setCameraFacingMode = useCallback(async (value: CameraFacingMode) => {
+    const current = store.getSnapshot();
+    if (current.cameraFacingMode === value) return;
+    if (current.status === "idle" || current.status === "error") {
+      store.setState({ cameraFacingMode: value });
+      return;
+    }
+    if (current.status !== "live" || !peerConnection) return;
+    const sender = peerConnection.getSenders().find((candidate) => candidate.track?.kind === "video");
+    if (!sender) {
+      store.setState({ message: "활성 영상 송신기를 찾을 수 없습니다." });
+      return;
+    }
+    store.setState({ message: "카메라를 전환하고 있습니다." });
+    try {
+      await mediaController.switchCamera(runtime.mediaDevices, value, (track) => sender.replaceTrack(track));
+      mediaController.attach(videoRef.current);
+      store.setState({ cameraFacingMode: value, message: "카메라를 전환했습니다." });
+    } catch (reason: unknown) {
+      store.setState({ message: mediaAccessErrorMessage(reason, "카메라") });
+    }
+  }, [mediaController, peerConnection, runtime.mediaDevices, store]);
+
+  const setCoordinatePrecision = useCallback((value: CoordinatePrecision) => {
+    store.setState({ coordinatePrecision: value });
+  }, [store]);
 
   const publish = useCallback(async () => {
-    if (!mediaRef.current || publishingRef.current || !identity) return;
-    publishingRef.current = true;
-    const activeGeneration = store.getSnapshot().generation;
-    const wasReconnecting = store.getSnapshot().status === "reconnecting";
-    const requested = wasReconnecting
-      ? dispatch({ type: "RETRY_REQUESTED", generation: activeGeneration })
-      : dispatch({ type: "PUBLISH_REQUESTED", generation: activeGeneration });
+    const activeMedia = mediaController.stream;
+    if (!activeMedia || !identity || !connectionCoordinator.beginPublishing()) return;
+    const generation = store.getSnapshot().generation;
+    const reconnecting = store.getSnapshot().status === "reconnecting";
+    const requested = reconnecting
+      ? dispatch({ type: "RETRY_REQUESTED", generation })
+      : dispatch({ type: "PUBLISH_REQUESTED", generation });
     if (!requested.accepted) {
-      publishingRef.current = false;
+      connectionCoordinator.finishPublishing();
       return;
     }
     try {
-      const previousSession = publishSessionRef.current;
-      if (previousSession) {
-        publishSessionRef.current = null;
-        await gateway.end(previousSession).catch(() => undefined);
-      }
+      const previous = connectionCoordinator.replaceSession(null);
+      if (previous) await gateway.end(previous).catch(() => undefined);
       const authorization = await gateway.create(identity);
-      publishSessionRef.current = authorization;
+      if (!dispatch({ type: "AUTHORIZED", generation }).accepted) {
+        await gateway.end(authorization).catch(() => undefined);
+        return;
+      }
+      connectionCoordinator.replaceSession(authorization);
       store.setState({ streamId: authorization.streamId });
-      const authorized = dispatch({ type: "AUTHORIZED", generation: activeGeneration });
-      if (!authorized.accepted) return;
-      peerConnectionRef.current?.close();
+      connectionCoordinator.replaceConnection(null);
       const connection = await createWhipSession(
-        mediaRef.current,
-        authorization.publishUrl,
-        authorization.iceServers,
-        authorization.publishToken,
-        (state) => {
-          if (state !== "disconnected" && state !== "failed") return;
-          const lost = dispatch({ type: "CONNECTION_LOST", generation: activeGeneration });
-          if (!lost.accepted) return;
-          scheduleReconnect(activeGeneration);
+        activeMedia, authorization.publishUrl, authorization.iceServers, authorization.publishToken,
+        (connectionState) => {
+          if (connectionState !== "disconnected" && connectionState !== "failed") return;
+          if (dispatch({ type: "CONNECTION_LOST", generation }).accepted) scheduleReconnect(generation);
         },
-        runtime.fetch,
-        runtime.peerConnections,
-        runtime.scheduler,
+        runtime.fetch, runtime.peerConnections, runtime.scheduler,
       );
-      const connected = dispatch({ type: "CONNECTED", generation: activeGeneration });
-      if (!connected.accepted) {
+      if (!dispatch({ type: "CONNECTED", generation }).accepted) {
         connection.close();
         return;
       }
-      peerConnectionRef.current = connection;
+      connectionCoordinator.replaceConnection(connection);
       setPeerConnection(connection);
       startedAtRef.current = runtime.clock.now();
       reconnectScheduler.reset();
       store.setState({ message: "영상과 현장 센서를 송출하고 있습니다." });
     } catch (reason) {
-      if (mediaRef.current && (wasReconnecting || !runtime.network.online)) {
-        const lost = dispatch({ type: "CONNECTION_LOST", generation: activeGeneration });
-        if (lost.accepted) {
+      if (mediaController.stream && (reconnecting || !runtime.network.online)) {
+        if (dispatch({ type: "CONNECTION_LOST", generation }).accepted) {
           store.setState({ message: "네트워크 연결을 기다리고 있습니다." });
-          scheduleReconnect(activeGeneration);
+          scheduleReconnect(generation);
         }
-      } else {
-        const failure = dispatch({ type: "FAILED", generation: activeGeneration });
-        if (failure.accepted) {
-          store.setState({
-            message: reason instanceof Error ? reason.message : "송출을 시작하지 못했습니다.",
-          });
-        }
+      } else if (dispatch({ type: "FAILED", generation }).accepted) {
+        store.setState({ message: reason instanceof Error ? reason.message : "송출을 시작하지 못했습니다." });
       }
     } finally {
-      publishingRef.current = false;
+      connectionCoordinator.finishPublishing();
     }
-  }, [dispatch, gateway, identity, reconnectScheduler, runtime, scheduleReconnect, store]);
+  }, [connectionCoordinator, dispatch, gateway, identity, mediaController, reconnectScheduler, runtime, scheduleReconnect, store]);
 
   const stop = useCallback(() => {
     dispatch({ type: "STOPPED" });
     reconnectScheduler.reset();
-    publishingRef.current = false;
-    peerConnectionRef.current?.close();
-    peerConnectionRef.current = null;
+    void connectionCoordinator.release(gateway);
     setPeerConnection(null);
-    mediaRef.current?.getTracks().forEach((track) => track.stop());
-    mediaRef.current = null;
+    mediaController.stop(videoRef.current);
     setMedia(null);
-    store.setState({ mediaReady: false });
-    if (videoRef.current) videoRef.current.srcObject = null;
+    store.setState({ mediaReady: false, message: "송출을 종료했습니다." });
     stopSensors();
-    void wakeLockRef.current?.release();
-    wakeLockRef.current = null;
-    const activeSession = publishSessionRef.current;
-    publishSessionRef.current = null;
+    void wakeLockController.release();
     if (renewalTimerRef.current !== null) runtime.scheduler.clearInterval(renewalTimerRef.current);
     renewalTimerRef.current = null;
-    if (activeSession) void gateway.end(activeSession).catch(() => undefined);
-    store.setState({ message: "송출을 종료했습니다." });
-  }, [dispatch, gateway, reconnectScheduler, runtime.scheduler, stopSensors, store]);
+  }, [connectionCoordinator, dispatch, gateway, mediaController, reconnectScheduler, runtime.scheduler, stopSensors, store, wakeLockController]);
 
   const toggleMute = useCallback(() => {
     const nextMuted = !store.getSnapshot().muted;
-    mediaRef.current?.getAudioTracks().forEach((track) => {
-      track.enabled = !nextMuted;
-    });
+    mediaController.setMuted(nextMuted);
     store.setState({ muted: nextMuted });
+  }, [mediaController, store]);
+  const reportCameraControlError = useCallback((controlMessage: string) => {
+    store.setState({ message: controlMessage });
   }, [store]);
 
-  useEffect(() => {
-    store.setState({ quality: adaptiveQuality });
-  }, [adaptiveQuality, store]);
+  useRemoteCameraCommand({
+    active: status === "live",
+    identity,
+    onError: reportCameraControlError,
+    onFacingMode: setCameraFacingMode,
+    runtime,
+    streamId,
+  });
+  const talkback = useTalkbackReceiver({ active: status === "live", identity, runtime, streamId });
 
-  useEffect(() => {
-    publishRef.current = publish;
-  }, [publish]);
-
-  useEffect(() => runtime.network.subscribe(
-    () => {
-      store.setState({ isOnline: true });
-      const current = store.getSnapshot();
-      if (mediaRef.current && current.status === "reconnecting") {
-        store.setState({ message: "네트워크가 복구되어 송출을 다시 연결합니다." });
-        scheduleReconnect(current.generation);
-      }
-    },
-    () => {
-      store.setState({ isOnline: false });
-      reconnectScheduler.cancel();
-      if (mediaRef.current) {
-        const current = store.getSnapshot();
-        const lost = dispatch({ type: "CONNECTION_LOST", generation: current.generation });
-        if (lost.accepted) {
-          store.setState({ message: "네트워크가 끊겼습니다. 연결 복구를 기다립니다." });
-        }
-      }
-    },
-  ), [dispatch, reconnectScheduler, runtime.network, scheduleReconnect, store]);
-
-  useEffect(() => {
-    if (status !== "live" || !identity) return;
-    renewalTimerRef.current = runtime.scheduler.setInterval(() => {
-      const session = publishSessionRef.current;
-      if (!session) return;
-      void gateway.renew(session).then(
-        (renewed) => { publishSessionRef.current = renewed; },
-        (reason: unknown) => {
-          store.setState({ message: reason instanceof Error ? reason.message : "송출 세션 갱신 오류" });
-        },
-      );
-    }, 120_000);
-    const id = runtime.scheduler.setInterval(() => {
-      void gateway.sendTelemetry(
-        buildTelemetryPayload(
-          identity?.deviceUuid ?? "",
-          startedAtRef.current,
-          snapshot,
-          runtime.clock,
-          runtime.userAgent,
-        ),
-        identity,
-      ).catch((reason: unknown) => {
-        store.setState({
-          message: reason instanceof Error ? reason.message : "센서 전송 오류",
-        });
-      });
-    }, 2_000);
-    return () => {
-      runtime.scheduler.clearInterval(id);
-      if (renewalTimerRef.current !== null) runtime.scheduler.clearInterval(renewalTimerRef.current);
-      renewalTimerRef.current = null;
-    };
-  }, [gateway, identity, runtime, snapshot, status, store]);
-
+  useEffect(() => { store.setState({ quality: adaptiveQuality }); }, [adaptiveQuality, store]);
+  useEffect(() => { publishRef.current = publish; }, [publish]);
+  usePublisherRuntimeEffects({
+    connectionCoordinator, dispatch, gateway, identity, mediaController, reconnectScheduler,
+    renewalTimerRef, runtime, scheduleReconnect, sensorSnapshot: snapshot, startedAtRef, status, store,
+    wakeLockController,
+  });
   useEffect(() => stop, [stop]);
 
   return {
-    canInstall: pwa.canInstall,
-    install: pwa.install,
-    isInstalled: pwa.isInstalled,
-    isOnline,
-    mediaReady,
-    message,
-    muted,
-    prepare,
-    publish,
-    quality,
-    sensorError,
-    snapshot,
-    status,
-    stop,
-    streamId,
-    toggleMute,
-    videoRef,
+    cameraFacingMode, canInstall: pwa.canInstall, coordinatePrecision, install: pwa.install, isInstalled: pwa.isInstalled,
+    isOnline, mediaReady, message, muted, prepare, publish, quality, sensorError,
+    setCameraFacingMode, setCoordinatePrecision, snapshot, status, stop, streamId,
+    talkbackAudioRef: talkback.audioRef, talkbackStatus: talkback.status, toggleMute, videoRef,
   } as const;
+}
+
+function mediaAccessErrorMessage(reason: unknown, target: "카메라" | "카메라와 마이크"): string {
+  if (reason instanceof DOMException && reason.name === "NotAllowedError") {
+    return `${target} 권한이 차단되었습니다. 브라우저 사이트 설정에서 권한을 허용한 뒤 다시 시도하세요.`;
+  }
+  if (reason instanceof DOMException && reason.name === "NotFoundError") {
+    return `${target} 장치를 찾을 수 없습니다.`;
+  }
+  if (reason instanceof DOMException && reason.name === "NotReadableError") {
+    return `${target}를 다른 앱에서 사용 중입니다. 다른 앱을 닫고 다시 시도하세요.`;
+  }
+  return reason instanceof Error ? reason.message : `${target} 접근에 실패했습니다.`;
 }

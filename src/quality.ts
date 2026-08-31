@@ -8,20 +8,31 @@ export interface QualityProfile {
 }
 
 export const QUALITY_PROFILES: Record<VideoQuality, QualityProfile> = {
-  high: { width: 1280, height: 720, frameRate: 24, maxBitrate: 2_500_000 },
-  medium: { width: 960, height: 540, frameRate: 20, maxBitrate: 1_400_000 },
-  low: { width: 640, height: 360, frameRate: 15, maxBitrate: 700_000 },
+  high: { width: 1280, height: 720, frameRate: 20, maxBitrate: 1_800_000 },
+  medium: { width: 960, height: 540, frameRate: 18, maxBitrate: 1_100_000 },
+  low: { width: 640, height: 360, frameRate: 12, maxBitrate: 450_000 },
 };
 
 export function selectQuality(
   availableOutgoingBitrate: number | null,
-  packetsLost: number,
+  packetLossDelta: number,
 ): VideoQuality {
-  if (availableOutgoingBitrate !== null && availableOutgoingBitrate < 900_000) return "low";
-  if (availableOutgoingBitrate !== null && availableOutgoingBitrate < 1_800_000) return "medium";
-  if (packetsLost >= 25) return "low";
-  if (packetsLost >= 8) return "medium";
+  if (availableOutgoingBitrate !== null && availableOutgoingBitrate < 650_000) return "low";
+  if (packetLossDelta >= 5) return "low";
+  if (availableOutgoingBitrate === null) return "medium";
+  if (availableOutgoingBitrate !== null && availableOutgoingBitrate < 1_500_000) return "medium";
+  if (packetLossDelta >= 2) return "medium";
   return "high";
+}
+
+export function shouldApplyQuality(
+  current: VideoQuality,
+  recommended: VideoQuality,
+  consecutiveHealthySamples: number,
+): boolean {
+  const rank: Record<VideoQuality, number> = { low: 0, medium: 1, high: 2 };
+  if (rank[recommended] < rank[current]) return true;
+  return rank[recommended] > rank[current] && consecutiveHealthySamples >= 6;
 }
 
 export async function applyVideoQuality(

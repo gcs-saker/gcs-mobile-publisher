@@ -46,3 +46,7 @@ export const PUBLISHER_STATUS_VIEW: Readonly<Record<PublisherStatus, PublisherSt
 export function publisherStatusView(status: PublisherStatus): PublisherStatusView {
   return PUBLISHER_STATUS_VIEW[status];
 }
+
+export function isPublisherMediaControlReady(status: PublisherStatus, mediaReady: boolean): boolean {
+  return mediaReady && status === "live";
+}

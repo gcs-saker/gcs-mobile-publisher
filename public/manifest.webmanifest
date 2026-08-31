@@ -4,7 +4,7 @@
   "description": "Android 현장 영상 및 센서 송출기",
   "start_url": "/",
   "display": "standalone",
-  "orientation": "portrait",
+  "orientation": "any",
   "background_color": "#07110e",
   "theme_color": "#07110e",
   "icons": [
