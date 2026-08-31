@@ -2,7 +2,7 @@ import type { VideoQuality } from "../../quality";
 import type { PublisherStatus } from "../../types";
 import { ActionButton } from "../atoms/ActionButton";
 import { RuntimeStrip } from "../molecules/RuntimeStrip";
-import { publisherStatusView } from "../publisherViewModel";
+import { isPublisherMediaControlReady, publisherStatusView } from "../publisherViewModel";
 import type { CameraFacingMode, CoordinatePrecision } from "../../features/publisher/domain/publisherSettings";
 
 export interface PublisherControlsProps {
@@ -27,6 +27,7 @@ export interface PublisherControlsProps {
 
 export function PublisherControls(props: PublisherControlsProps) {
   const view = publisherStatusView(props.status);
+  const mediaControlReady = isPublisherMediaControlReady(props.status, props.mediaReady);
   function runPrimaryAction(): void {
     if (view.primaryAction.action === "prepare") void props.onPrepare();
     else if (view.primaryAction.action === "publish") void props.onPublish();
@@ -48,7 +49,7 @@ export function PublisherControls(props: PublisherControlsProps) {
         <ActionButton onClick={runPrimaryAction} tone={view.primaryAction.tone}>
           {view.primaryAction.label}
         </ActionButton>
-        <ActionButton disabled={!props.mediaReady} onClick={props.onToggleMute} tone="secondary">
+        <ActionButton disabled={!mediaControlReady} onClick={props.onToggleMute} tone="secondary">
           {props.muted ? "마이크 켜기" : "음소거"}
         </ActionButton>
       </div>

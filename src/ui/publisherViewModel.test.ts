@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { PublisherStatus } from "../types";
-import { publisherStatusView } from "./publisherViewModel";
+import { isPublisherMediaControlReady, publisherStatusView } from "./publisherViewModel";
 
 const EXPECTED_ACTIONS: Readonly<Record<PublisherStatus, string>> = {
   idle: "prepare",
@@ -23,4 +23,13 @@ describe("publisherStatusView", () => {
       expect(view.primaryAction.label.length).toBeGreaterThan(0);
     },
   );
+});
+
+describe("isPublisherMediaControlReady", () => {
+  it("unlocks media controls only after WHIP is live", () => {
+    expect(isPublisherMediaControlReady("connecting", true)).toBe(false);
+    expect(isPublisherMediaControlReady("reconnecting", true)).toBe(false);
+    expect(isPublisherMediaControlReady("live", true)).toBe(true);
+    expect(isPublisherMediaControlReady("live", false)).toBe(false);
+  });
 });
