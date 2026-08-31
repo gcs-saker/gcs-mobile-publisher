@@ -3,7 +3,7 @@ import { createPublisherStore, type PublisherState } from "./publisherStore";
 
 const initialState: PublisherState = {
   cameraFacingMode: "environment",
-  coordinatePrecision: 2,
+  coordinatePrecision: 6,
   generation: 0,
   isOnline: true,
   mediaReady: false,

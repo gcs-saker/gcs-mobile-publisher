@@ -24,4 +24,16 @@ describe("buildTelemetryPayload", () => {
     expect(payload.location.latitude).toBe(36);
     expect(payload.location.longitude).toBe(128);
   });
+
+  it("preserves six decimal places for the default GPS transmission precision", () => {
+    const clock = { now: () => 13_000, isoNow: () => "unused" };
+    const snapshot = {
+      ...emptySnapshot,
+      location: { ...emptySnapshot.location, latitude: 35.1234567, longitude: 128.9876543 },
+    };
+    const payload = buildTelemetryPayload("CID007", 10_000, snapshot, 6, clock, "Android");
+
+    expect(payload.location.latitude).toBe(35.123457);
+    expect(payload.location.longitude).toBe(128.987654);
+  });
 });
