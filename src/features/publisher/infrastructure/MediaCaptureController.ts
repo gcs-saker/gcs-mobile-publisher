@@ -19,7 +19,13 @@ function captureConstraints(facingMode: CameraFacingMode): MediaStreamConstraint
 }
 
 function videoOnlyConstraints(facingMode: CameraFacingMode): MediaStreamConstraints {
-  return { video: videoConstraints(facingMode), audio: false };
+  return {
+    video: {
+      ...videoConstraints(facingMode),
+      facingMode: { exact: facingMode },
+    },
+    audio: false,
+  };
 }
 
 function stopTracks(tracks: MediaStreamTrack[]): void {
@@ -58,8 +64,11 @@ export class MediaCaptureController {
     const activeTrack = previousTracks[0];
     if (activeTrack?.applyConstraints) {
       try {
-        await activeTrack.applyConstraints(videoConstraints(facingMode));
-        return;
+        await activeTrack.applyConstraints({
+          ...videoConstraints(facingMode),
+          facingMode: { exact: facingMode },
+        });
+        if (activeTrack.getSettings().facingMode === facingMode) return;
       } catch {
         // Some mobile browsers cannot change facing mode on an active track; use atomic replacement below.
       }

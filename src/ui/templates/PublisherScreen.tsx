@@ -17,10 +17,12 @@ export function PublisherScreen({
   return (
     <main className="app">
       <video ref={controller.videoRef} className="camera" autoPlay muted playsInline />
-      <div className="publisher-talkback" aria-live="polite">
-        <span>{controller.talkbackStatus}</span>
-        <audio ref={controller.talkbackAudioRef} autoPlay controls />
-      </div>
+      <audio ref={controller.talkbackAudioRef} autoPlay className="publisher-talkback__audio" />
+      {controller.talkbackStatus === "관제 음성 수신 중" ? (
+        <div className="publisher-talkback" aria-live="polite">
+          <span>{controller.talkbackStatus}</span>
+        </div>
+      ) : null}
       <div className="shade" aria-hidden="true" />
       <PublisherHeader
         battery={controller.snapshot.battery}

@@ -119,7 +119,12 @@ describe("publisher browser resource controllers", () => {
 
   it("switches facing mode in place without another permission request when supported", async () => {
     const applyConstraints = vi.fn().mockResolvedValue(undefined);
-    const activeTrack = { applyConstraints, kind: "video", stop: vi.fn() } as unknown as MediaStreamTrack;
+    const activeTrack = {
+      applyConstraints,
+      getSettings: () => ({ facingMode: "user" }),
+      kind: "video",
+      stop: vi.fn(),
+    } as unknown as MediaStreamTrack;
     const activeStream = {
       getAudioTracks: () => [], getTracks: () => [activeTrack], getVideoTracks: () => [activeTrack],
     } as unknown as MediaStream;
@@ -131,9 +136,41 @@ describe("publisher browser resource controllers", () => {
 
     await controller.switchCamera(devices, "user", replaceTrack);
 
-    expect(applyConstraints).toHaveBeenCalledWith(expect.objectContaining({ facingMode: { ideal: "user" } }));
+    expect(applyConstraints).toHaveBeenCalledWith(expect.objectContaining({ facingMode: { exact: "user" } }));
     expect(getUserMedia).toHaveBeenCalledTimes(1);
     expect(replaceTrack).not.toHaveBeenCalled();
+  });
+
+  it("replaces the track when Android accepts constraints without changing the camera", async () => {
+    const previousTrack = {
+      applyConstraints: vi.fn().mockResolvedValue(undefined),
+      getSettings: () => ({ facingMode: "environment" }),
+      kind: "video",
+      stop: vi.fn(),
+    } as unknown as MediaStreamTrack;
+    const nextTrack = { kind: "video", stop: vi.fn() } as unknown as MediaStreamTrack;
+    const activeStream = {
+      addTrack: vi.fn(),
+      getAudioTracks: () => [],
+      getTracks: () => [previousTrack],
+      getVideoTracks: () => [previousTrack],
+      removeTrack: vi.fn(),
+    } as unknown as MediaStream;
+    const candidate = {
+      getTracks: () => [nextTrack],
+      getVideoTracks: () => [nextTrack],
+    } as unknown as MediaStream;
+    const getUserMedia = vi.fn().mockResolvedValueOnce(activeStream).mockResolvedValueOnce(candidate);
+    const controller = new MediaCaptureController();
+    await controller.capture({ getUserMedia } as unknown as MediaDevices, "environment");
+    const replaceTrack = vi.fn().mockResolvedValue(undefined);
+
+    await controller.switchCamera({ getUserMedia } as unknown as MediaDevices, "user", replaceTrack);
+
+    expect(getUserMedia).toHaveBeenLastCalledWith(expect.objectContaining({
+      video: expect.objectContaining({ facingMode: { exact: "user" } }),
+    }));
+    expect(replaceTrack).toHaveBeenCalledWith(nextTrack);
   });
 
   it("releases connection and publish session exactly once", async () => {
