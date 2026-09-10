@@ -212,7 +212,13 @@ export function usePublisherController(identity: AuthenticatedAccount | null) {
     runtime,
     streamId,
   });
-  const talkback = useTalkbackReceiver({ active: status === "live", identity, runtime, streamId });
+  const talkback = useTalkbackReceiver({
+    active: status === "live",
+    iceServers: connectionCoordinator.session?.iceServers ?? [],
+    identity,
+    runtime,
+    streamId,
+  });
 
   useEffect(() => { store.setState({ quality: adaptiveQuality }); }, [adaptiveQuality, store]);
   useEffect(() => { publishRef.current = publish; }, [publish]);
@@ -227,7 +233,8 @@ export function usePublisherController(identity: AuthenticatedAccount | null) {
     cameraFacingMode, canInstall: pwa.canInstall, coordinatePrecision, install: pwa.install, isInstalled: pwa.isInstalled,
     isOnline, mediaReady, message, muted, prepare, publish, quality, sensorError,
     setCameraFacingMode, setCoordinatePrecision, snapshot, status, stop, streamId,
-    talkbackAudioRef: talkback.audioRef, talkbackStatus: talkback.status, toggleMute, videoRef,
+    resumeTalkbackPlayback: talkback.resumePlayback, talkbackAudioRef: talkback.audioRef,
+    talkbackStatus: talkback.status, toggleMute, videoRef,
   } as const;
 }
 
