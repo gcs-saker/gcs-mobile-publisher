@@ -1,6 +1,7 @@
 import { PublisherControls } from "../organisms/PublisherControls";
 import { PublisherHeader } from "../organisms/PublisherHeader";
 import { SensorDashboard } from "../organisms/SensorDashboard";
+import { TalkbackPlayback } from "../molecules/TalkbackPlayback";
 import type { ReturnTypeOfPublisherController } from "../types";
 
 export interface PublisherScreenProps {
@@ -17,12 +18,8 @@ export function PublisherScreen({
   return (
     <main className="app">
       <video ref={controller.videoRef} className="camera" autoPlay muted playsInline />
-      <audio ref={controller.talkbackAudioRef} autoPlay className="publisher-talkback__audio" />
-      {controller.talkbackStatus === "관제 음성 수신 중" ? (
-        <div className="publisher-talkback" aria-live="polite">
-          <span>{controller.talkbackStatus}</span>
-        </div>
-      ) : null}
+      <TalkbackPlayback audioRef={controller.talkbackAudioRef}
+        onResume={controller.resumeTalkbackPlayback} status={controller.talkbackStatus} />
       <div className="shade" aria-hidden="true" />
       <PublisherHeader
         battery={controller.snapshot.battery}

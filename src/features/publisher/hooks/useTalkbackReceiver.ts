@@ -1,26 +1,43 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { fetchTalkbackPlaybackUrl } from "../../../api";
 import type { RuntimeDependencies } from "../../../app/ports";
 import type { AuthenticatedAccount } from "../../auth/contracts/authentication";
 import { talkbackRetryDelayMs } from "../domain/talkbackRetryPolicy";
+import { createTalkbackWhepSession } from "../infrastructure/talkbackWhepSession";
 
 
 export function useTalkbackReceiver(input: {
   active: boolean;
+  iceServers: RTCIceServer[];
   identity: AuthenticatedAccount | null;
   runtime: RuntimeDependencies;
   streamId: string;
 }) {
-  const { active, identity, runtime, streamId } = input;
+  const { active, iceServers, identity, runtime, streamId } = input;
   const audioRef = useRef<HTMLAudioElement>(null);
   const [status, setStatus] = useState("대기");
-  const session = useMemo(() => ({ active, identity, runtime, streamId }), [active, identity, runtime, streamId]);
+  const session = useMemo(
+    () => ({ active, iceServers, identity, runtime, streamId }),
+    [active, iceServers, identity, runtime, streamId],
+  );
   useEffect(() => startTalkbackReceiver(session, audioRef, setStatus), [session]);
-  return { audioRef, status } as const;
+  const resumePlayback = useCallback(async () => {
+    if (!audioRef.current) return;
+    try {
+      await audioRef.current.play();
+      setStatus("관제 음성 수신 중");
+    } catch {
+      setStatus("음성 재생 허용 필요");
+    }
+  }, []);
+  return { audioRef, resumePlayback, status } as const;
 }
 
 function startTalkbackReceiver(
-  input: { active: boolean; identity: AuthenticatedAccount | null; runtime: RuntimeDependencies; streamId: string },
+  input: {
+    active: boolean; iceServers: RTCIceServer[]; identity: AuthenticatedAccount | null;
+    runtime: RuntimeDependencies; streamId: string;
+  },
   audioRef: { current: HTMLAudioElement | null },
   setStatus: (status: string) => void,
 ): (() => void) | undefined {
@@ -52,12 +69,15 @@ function startTalkbackReceiver(
     try {
       setStatus("관제 음성 연결 중");
       const url = await fetchTalkbackPlaybackUrl(input.identity!, input.streamId, input.runtime.fetch);
-      connection = input.runtime.peerConnections.create({});
-      connection.addTransceiver("audio", { direction: "recvonly" });
-      connection.ontrack = (event) => {
-        attachTalkbackAudio(audioRef.current, event);
-        if (!disposed) setStatus("관제 음성 수신 중");
-      };
+      connection = await createTalkbackWhepSession({
+        audio: audioRef.current, fetcher: input.runtime.fetch, iceServers: input.iceServers,
+        onPlaybackState: (nextStatus) => { if (!disposed) setStatus(nextStatus); },
+        peerConnections: input.runtime.peerConnections, scheduler: input.runtime.scheduler, url,
+      });
+      if (disposed) {
+        closeConnection();
+        return;
+      }
       connection.onconnectionstatechange = () => {
         if (!connection) return;
         if (connection.connectionState === "failed" || connection.connectionState === "closed") {
@@ -65,14 +85,6 @@ function startTalkbackReceiver(
           scheduleRetry();
         }
       };
-      const offer = await connection.createOffer();
-      await connection.setLocalDescription(offer);
-      if (!offer.sdp) throw new Error("관제 음성 WHEP offer를 생성하지 못했습니다.");
-      const response = await input.runtime.fetch(url, {
-        body: offer.sdp, headers: { "Content-Type": "application/sdp" }, method: "POST",
-      });
-      if (!response.ok) throw new Error(`관제 음성 WHEP 연결 실패 (${response.status})`);
-      await connection.setRemoteDescription({ type: "answer", sdp: await response.text() });
     } catch {
       closeConnection();
       scheduleRetry();
@@ -87,10 +99,4 @@ function startTalkbackReceiver(
     closeConnection();
     if (audioRef.current) audioRef.current.srcObject = null;
   };
-}
-
-function attachTalkbackAudio(audio: HTMLAudioElement | null, event: RTCTrackEvent): void {
-  if (!audio) return;
-  audio.srcObject = event.streams[0] ?? new MediaStream([event.track]);
-  void audio.play().catch(() => undefined);
 }
