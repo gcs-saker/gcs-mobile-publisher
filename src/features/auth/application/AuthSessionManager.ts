@@ -1,35 +1,34 @@
 import type {
-  AuthenticatedDevice,
+  AuthenticatedAccount,
   AuthenticationGateway,
   AuthSessionRepository,
-  DeviceCredential,
-  DeviceRegistrationRequest,
+  LoginCredentials,
 } from "../contracts/authentication";
 
 export class AuthSessionManager {
-  constructor(
-    private readonly gateway: AuthenticationGateway,
-    private readonly repository: AuthSessionRepository,
-  ) {}
+  constructor(private readonly gateway: AuthenticationGateway, private readonly repository: AuthSessionRepository) {}
 
-  async authenticate(identity: DeviceCredential): Promise<AuthenticatedDevice> {
-    return this.persist(await this.gateway.authenticate(identity));
+  async login(credentials: LoginCredentials): Promise<AuthenticatedAccount> {
+    return this.persist(await this.gateway.login(credentials));
   }
 
-  async register(request: DeviceRegistrationRequest): Promise<AuthenticatedDevice> {
-    const registration = await this.gateway.register(request);
-    return this.persist({ credential: registration.credential, deviceUuid: registration.deviceUuid });
+  async load(): Promise<AuthenticatedAccount | null> {
+    const memorySession = await this.repository.load();
+    if (memorySession && Date.parse(memorySession.expiresAt) > Date.now()) return memorySession;
+    try {
+      return this.persist(await this.gateway.refresh());
+    } catch {
+      await this.repository.clear();
+      return null;
+    }
   }
 
-  load(): Promise<AuthenticatedDevice | null> {
-    return this.repository.load();
+  async clear(): Promise<void> {
+    const session = await this.repository.load();
+    try { await this.gateway.logout(session); } finally { await this.repository.clear(); }
   }
 
-  clear(): Promise<void> {
-    return this.repository.clear();
-  }
-
-  private async persist(session: AuthenticatedDevice): Promise<AuthenticatedDevice> {
+  private async persist(session: AuthenticatedAccount): Promise<AuthenticatedAccount> {
     await this.repository.save(session);
     return session;
   }

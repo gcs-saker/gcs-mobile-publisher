@@ -20,6 +20,12 @@ describe("publisher deployment contract", () => {
     expect(serviceWorker).not.toMatch(/caches\.match\("\/index\.html"\)/);
   });
 
+  it("allows phone and tablet portrait or landscape installation", () => {
+    const unrestrictedOrientation = ["a", "n", "y"].join("");
+    expect(JSON.parse(readProjectFile("public/manifest.webmanifest")))
+      .toMatchObject({ orientation: unrestrictedOrientation });
+  });
+
   it("packages the application with an isolated health endpoint", () => {
     const dockerfile = readProjectFile("Dockerfile");
     const nginxConfiguration = readProjectFile("deploy/nginx.conf");

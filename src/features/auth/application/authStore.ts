@@ -1,4 +1,4 @@
-import type { AuthenticatedDevice } from "../contracts/authentication";
+import type { AuthenticatedAccount } from "../contracts/authentication";
 
 export type AuthenticationStatus =
   | "restoring"
@@ -9,7 +9,7 @@ export type AuthenticationStatus =
 
 export interface AuthenticationState {
   message: string;
-  session: AuthenticatedDevice | null;
+  session: AuthenticatedAccount | null;
   status: AuthenticationStatus;
 }
 

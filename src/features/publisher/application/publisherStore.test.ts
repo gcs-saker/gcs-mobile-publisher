@@ -2,12 +2,14 @@ import { describe, expect, it, vi } from "vitest";
 import { createPublisherStore, type PublisherState } from "./publisherStore";
 
 const initialState: PublisherState = {
+  cameraFacingMode: "environment",
+  coordinatePrecision: 6,
   generation: 0,
   isOnline: true,
   mediaReady: false,
   message: "ready",
   muted: false,
-  quality: "high",
+  quality: "medium",
   status: "idle",
   streamId: "",
 };

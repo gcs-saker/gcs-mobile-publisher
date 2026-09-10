@@ -33,12 +33,14 @@ export function PublisherStoreProvider({ children, gateway, store }: PublisherSt
   gatewayRef.current ??= gateway ?? new HttpPublisherGateway(runtime.fetch);
   if (!storeRef.current) {
     storeRef.current = store ?? createPublisherStore({
+      cameraFacingMode: "environment",
+      coordinatePrecision: 6,
       generation: 0,
       isOnline: runtime.network.online,
       mediaReady: false,
       message: "송출 준비를 눌러 카메라와 센서를 시작하세요.",
       muted: false,
-      quality: "high",
+      quality: "medium",
       status: "idle",
       streamId: "",
     });

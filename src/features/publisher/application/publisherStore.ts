@@ -1,7 +1,10 @@
 import type { PublisherStatus } from "../../../types";
 import type { VideoQuality } from "../../../quality";
+import type { CameraFacingMode, CoordinatePrecision } from "../domain/publisherSettings";
 
 export interface PublisherState {
+  cameraFacingMode: CameraFacingMode;
+  coordinatePrecision: CoordinatePrecision;
   generation: number;
   isOnline: boolean;
   mediaReady: boolean;

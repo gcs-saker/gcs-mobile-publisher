@@ -5,14 +5,14 @@ import { PublisherScreen } from "./ui/templates/PublisherScreen";
 
 export function App() {
   const authentication = useAuthentication();
-  const publisher = usePublisherController(authentication.device);
+  const publisher = usePublisherController(authentication.session);
   if (authentication.status !== "authenticated") {
     return <AuthenticationScreen controller={authentication} />;
   }
   return (
     <PublisherScreen
       controller={publisher}
-      principalName={authentication.device?.deviceUuid ?? ""}
+      principalName={authentication.session?.username ?? ""}
       onLogout={authentication.logout}
     />
   );

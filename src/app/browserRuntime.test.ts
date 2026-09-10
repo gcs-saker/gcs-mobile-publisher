@@ -8,9 +8,10 @@ function fakeRuntime(): RuntimeDependencies {
     clock: { now: () => 10, isoNow: () => "1970-01-01T00:00:00.010Z" },
     fetch: vi.fn(),
     geolocation: null,
+    lifecycle: { subscribeResume: () => () => undefined },
     mediaDevices: null,
     network: { online: true, subscribe: () => () => undefined },
-    orientation: { subscribe: () => () => undefined },
+    orientation: { screenAngle: 0, subscribe: () => () => undefined },
     peerConnections: { create: vi.fn() },
     random: { next: () => 0.5 },
     scheduler: {

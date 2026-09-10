@@ -12,6 +12,19 @@ export function createBrowserRuntime(): RuntimeDependencies {
     fetch: window.fetch.bind(window),
     geolocation: navigator.geolocation ?? null,
     mediaDevices: navigator.mediaDevices ?? null,
+    lifecycle: {
+      subscribeResume(listener) {
+        const notifyWhenVisible = () => {
+          if (document.visibilityState === "visible") listener();
+        };
+        document.addEventListener("visibilitychange", notifyWhenVisible);
+        window.addEventListener("pageshow", notifyWhenVisible);
+        return () => {
+          document.removeEventListener("visibilitychange", notifyWhenVisible);
+          window.removeEventListener("pageshow", notifyWhenVisible);
+        };
+      },
+    },
     network: {
       get online() {
         return navigator.onLine;
@@ -26,6 +39,9 @@ export function createBrowserRuntime(): RuntimeDependencies {
       },
     },
     orientation: {
+      get screenAngle() {
+        return window.screen.orientation?.angle ?? 0;
+      },
       subscribe(listener) {
         window.addEventListener("deviceorientation", listener, true);
         return () => window.removeEventListener("deviceorientation", listener, true);
