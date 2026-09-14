@@ -1,0 +1,132 @@
+name: Signed mobile release
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+concurrency:
+  group: signed-mobile-release-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions: {}
+
+jobs:
+  verified-source:
+    runs-on: ubuntu-latest
+    permissions:
+      checks: read
+      contents: read
+    steps:
+      - name: Require successful source quality check
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          checks="$(gh api --paginate "/repos/${GITHUB_REPOSITORY}/commits/${GITHUB_SHA}/check-runs?per_page=100")"
+          jq -e '[.check_runs[] | select(.name == "Typecheck, test, and build" and .conclusion == "success")] | length > 0' \
+            <<<"$checks" >/dev/null || {
+              echo "required successful check is missing: Typecheck, test, and build" >&2
+              exit 1
+            }
+
+  signed-image:
+    needs: verified-source
+    runs-on: ubuntu-latest
+    permissions:
+      artifact-metadata: write
+      attestations: write
+      contents: read
+      id-token: write
+      packages: write
+    steps:
+      - name: Check out immutable source
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+
+      - name: Authenticate to GHCR
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Define immutable image name
+        shell: bash
+        run: echo "IMAGE=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/gcs-mobile-publisher" >> "$GITHUB_ENV"
+
+      - name: Build and push digest-addressable image
+        id: build
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: .
+          file: Dockerfile
+          push: true
+          tags: ${{ env.IMAGE }}:${{ github.sha }}
+          build-args: SOURCE_COMMIT=${{ github.sha }}
+          provenance: mode=max
+          sbom: false
+
+      - name: Generate SPDX SBOM
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0
+        with:
+          image: ${{ env.IMAGE }}@${{ steps.build.outputs.digest }}
+          format: spdx-json
+          output-file: ${{ runner.temp }}/mobile-publisher.spdx.json
+          artifact-name: mobile-publisher-release-sbom.spdx.json
+
+      - name: Block fixed high and critical vulnerabilities
+        uses: anchore/scan-action@1638637db639e0ade3258b51db49a9a137574c3e # v6
+        with:
+          image: ${{ env.IMAGE }}@${{ steps.build.outputs.digest }}
+          fail-build: true
+          severity-cutoff: high
+          only-fixed: true
+
+      - name: Attest build provenance
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4
+        with:
+          subject-name: ${{ env.IMAGE }}
+          subject-digest: ${{ steps.build.outputs.digest }}
+          push-to-registry: true
+
+      - name: Attest SPDX SBOM
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4
+        with:
+          subject-name: ${{ env.IMAGE }}
+          subject-digest: ${{ steps.build.outputs.digest }}
+          sbom-path: ${{ runner.temp }}/mobile-publisher.spdx.json
+          push-to-registry: true
+
+      - name: Install verified Cosign release
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+
+      - name: Sign immutable image with GitHub OIDC
+        shell: bash
+        run: |
+          cosign sign --yes \
+            --bundle "${RUNNER_TEMP}/mobile-publisher.cosign.bundle.json" \
+            "${IMAGE}@${{ steps.build.outputs.digest }}"
+
+      - name: Verify signer identity and immutable digest
+        shell: bash
+        run: |
+          cosign verify \
+            --certificate-identity-regexp '^https://github.com/gcs-saker/gcs-mobile-publisher/.github/workflows/signed-release.yml@refs/(tags|heads)/' \
+            --certificate-oidc-issuer 'https://token.actions.githubusercontent.com' \
+            "${IMAGE}@${{ steps.build.outputs.digest }}"
+
+      - name: Upload release evidence
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
+        with:
+          name: mobile-publisher-signed-release-evidence
+          if-no-files-found: error
+          retention-days: 90
+          path: |
+            ${{ runner.temp }}/mobile-publisher.spdx.json
+            ${{ runner.temp }}/mobile-publisher.cosign.bundle.json
