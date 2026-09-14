@@ -43,6 +43,13 @@ jobs:
       - name: Verify source
         run: pnpm run check
 
+      - name: Build immutable-base runtime image
+        run: |
+          docker build \
+            --build-arg "SOURCE_COMMIT=${GITHUB_SHA}" \
+            --tag "gcs-mobile-publisher:${GITHUB_SHA}" \
+            .
+
       - name: Check repository hygiene
         shell: bash
         run: |
