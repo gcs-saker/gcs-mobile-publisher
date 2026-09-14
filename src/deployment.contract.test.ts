@@ -15,9 +15,26 @@ describe("publisher deployment contract", () => {
     const entrypoint = readProjectFile("src/main.tsx");
     const serviceWorker = readProjectFile("public/sw.js");
 
-    expect(entrypoint).toContain('register("/publisher/sw.js", { scope: "/publisher/" })');
+    expect(entrypoint).toContain('register("/publisher/sw.js", {');
+    expect(entrypoint).toContain('scope: "/publisher/", updateViaCache: "none"');
     expect(serviceWorker).toContain('const APP_BASE = "/publisher/"');
+    expect(serviceWorker).not.toContain("skipWaiting");
+    expect(serviceWorker).toContain("url.origin !== self.location.origin");
+    expect(serviceWorker).toContain("url.pathname.startsWith(APP_BASE)");
     expect(serviceWorker).not.toMatch(/caches\.match\("\/index\.html"\)/);
+  });
+
+  it("keeps installation navigation and icons inside the publisher route", () => {
+    const manifest = JSON.parse(readProjectFile("public/manifest.webmanifest"));
+    const entrypoint = readProjectFile("index.html");
+
+    expect(manifest).toMatchObject({
+      id: "/publisher/",
+      start_url: "/publisher/",
+      scope: "/publisher/"
+    });
+    expect(manifest.icons[0].src).toBe("/publisher/icon.svg");
+    expect(entrypoint).toContain('href="/publisher/manifest.webmanifest"');
   });
 
   it("allows phone and tablet portrait or landscape installation", () => {

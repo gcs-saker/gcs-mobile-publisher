@@ -23,6 +23,8 @@ createRoot(document.getElementById("root")!).render(
 
 if ("serviceWorker" in navigator && import.meta.env.PROD) {
   window.addEventListener("load", () => {
-    void navigator.serviceWorker.register("/publisher/sw.js", { scope: "/publisher/" });
+    void navigator.serviceWorker
+      .register("/publisher/sw.js", { scope: "/publisher/", updateViaCache: "none" })
+      .catch((error: unknown) => console.error("service worker registration failed", error));
   });
 }

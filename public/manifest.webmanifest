@@ -2,14 +2,16 @@
   "name": "GCS Mobile Publisher",
   "short_name": "GCS 송출",
   "description": "Android 현장 영상 및 센서 송출기",
-  "start_url": "/",
+  "id": "/publisher/",
+  "start_url": "/publisher/",
+  "scope": "/publisher/",
   "display": "standalone",
   "orientation": "any",
   "background_color": "#07110e",
   "theme_color": "#07110e",
   "icons": [
     {
-      "src": "/icon.svg",
+      "src": "/publisher/icon.svg",
       "sizes": "any",
       "type": "image/svg+xml",
       "purpose": "any maskable"
