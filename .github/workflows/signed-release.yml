@@ -128,6 +128,19 @@ jobs:
             --certificate-oidc-issuer 'https://token.actions.githubusercontent.com' \
             "${IMAGE}@${{ steps.build.outputs.digest }}"
 
+      - name: Create integration release entry
+        shell: bash
+        run: |
+          jq -n \
+            --arg service mobile-publisher \
+            --arg image "${IMAGE}@${{ steps.build.outputs.digest }}" \
+            --arg sbomSha256 "$(sha256sum "${RUNNER_TEMP}/mobile-publisher.spdx.json" | cut -d' ' -f1)" \
+            --arg licenseReportSha256 "$(sha256sum license-report.json | cut -d' ' -f1)" \
+            --arg noticesSha256 "$(sha256sum THIRD_PARTY_NOTICES.md | cut -d' ' -f1)" \
+            '{service: $service, image: $image, sbomSha256: $sbomSha256,
+              licenseReportSha256: $licenseReportSha256, noticesSha256: $noticesSha256,
+              licenseReleaseAllowed: true}' > mobile-release-entry.json
+
       - name: Upload release evidence
         uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
         with:
@@ -140,3 +153,4 @@ jobs:
             license-report.json
             THIRD_PARTY_NOTICES.md
             LICENSE
+            mobile-release-entry.json
