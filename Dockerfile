@@ -16,6 +16,9 @@ ARG SOURCE_COMMIT=unknown
 LABEL org.opencontainers.image.source="https://github.com/gcs-saker/gcs-mobile-publisher" \
       org.opencontainers.image.revision="${SOURCE_COMMIT}"
 
+# The immutable upstream image can lag fixed Alpine security packages.
+RUN apk upgrade --no-cache
+
 COPY deploy/nginx.conf /etc/nginx/conf.d/default.conf
 COPY --from=build /app/dist /usr/share/nginx/html/publisher
 
