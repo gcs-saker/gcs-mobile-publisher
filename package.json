@@ -9,7 +9,8 @@
     "build": "tsc --noEmit && vite build",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "check": "pnpm run typecheck && pnpm test && pnpm run build"
+    "check": "pnpm run typecheck && pnpm test && pnpm run build",
+    "license:evidence": "node scripts/license-evidence.mjs license-report.json THIRD_PARTY_NOTICES.md"
   },
   "dependencies": {
     "@vitejs/plugin-react": "5.2.0",
